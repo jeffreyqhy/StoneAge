@@ -186,8 +186,13 @@ function renderUpgradeCard(equipmentName, fromLevel, toLevel, confidence) {
     );
   }
   const comparison = marketComparison(equipmentName, toLevel, plan.costs.safe, 1);
+  const routeOptions = buildUpgradeRouteOptions(equipmentName, fromLevel, toLevel, 1, confidence);
+  const recommendedRoute = routeOptions[0];
   const materialText = [
+    recommendedRoute ? `推荐路线：${recommendedRoute.label} · ${money(recommendedRoute.safeCost)}` : "",
     `结论：自己合成 ${money(plan.costs.safe)}；${comparison}`,
+    "最终路线对比",
+    ...routeOptions.map((option) => `${option.label}：${money(option.safeCost)}`),
     "底层材料（中间装备已展开）",
     ...plan.materials.map((row) => {
       const price = priceOf(row.name);
@@ -201,7 +206,7 @@ function renderUpgradeCard(equipmentName, fromLevel, toLevel, confidence) {
       const step = detail.step;
       return `${step.from_level} -> ${step.to_level}：成功率 ${(rateValue(step.success_rate) * 100).toFixed(2)}%，稳妥尝试 ${fmtQty(detail.diamondAttempts.safe)} 次`;
     }),
-  ];
+  ].filter(Boolean);
   return infoCard(
     equipmentName,
     `${fromLevel} -> ${toLevel}，自己合成 vs 直接买`,
@@ -212,6 +217,39 @@ function renderUpgradeCard(equipmentName, fromLevel, toLevel, confidence) {
     ],
     materialText,
   );
+}
+
+function buildUpgradeRouteOptions(equipmentName, fromLevel, toLevel, targetQuantity, confidence) {
+  const start = Number(fromLevel);
+  const end = Number(toLevel);
+  const selfPlan = calculateUpgradePlan(equipmentName, start, end, targetQuantity, confidence);
+  if (selfPlan.missing.length) return [];
+  const options = [{
+    label: `从 ${start} 级一路自己合到 ${end} 级`,
+    safeCost: selfPlan.costs.safe,
+  }];
+  for (let level = start + 1; level <= end; level += 1) {
+    const market = marketPriceForLevel(equipmentName, level);
+    if (!market) continue;
+    if (level === end) {
+      options.push({
+        label: `直接买 ${market.name}`,
+        safeCost: Number(market.price_diamonds || 0) * targetQuantity,
+      });
+      continue;
+    }
+    const routePlan = calculateUpgradePlan(equipmentName, level, end, targetQuantity, confidence, level);
+    if (routePlan.missing.length) continue;
+    let safeCost = routePlan.costs.safe;
+    if (!routePlan.materials.some((row) => normalize(row.name) === normalize(market.name))) {
+      safeCost += Number(market.price_diamonds || 0) * targetQuantity;
+    }
+    options.push({
+      label: `买 ${market.name} 后升到 ${end} 级`,
+      safeCost,
+    });
+  }
+  return options.sort((a, b) => a.safeCost - b.safeCost);
 }
 
 function renderTradeTool() {
@@ -317,15 +355,16 @@ function costMap(map) {
   return total;
 }
 
-function calculateUpgradePlan(equipmentName, fromLevel, toLevel, targetQuantity, confidence) {
+function calculateUpgradePlan(equipmentName, fromLevel, toLevel, targetQuantity, confidence, baseLevel = fromLevel) {
   const start = Number(fromLevel);
+  const baseLevelNumber = Number(baseLevel);
   const end = Number(toLevel);
   const stepsByFrom = new Map();
   const missing = [];
   for (const step of state.data.upgrades || []) {
     if (step.equipment_name === equipmentName) stepsByFrom.set(Number(step.from_level), step);
   }
-  for (let level = start; level < end; level += 1) {
+  for (let level = baseLevelNumber; level < end; level += 1) {
     if (!stepsByFrom.has(level)) missing.push(`${level} -> ${level + 1}`);
   }
   if (missing.length) return { missing };
@@ -363,8 +402,8 @@ function calculateUpgradePlan(equipmentName, fromLevel, toLevel, targetQuantity,
   }
 
   function expandLevel(level, successes, stack = [], countBase = false) {
-    if (level <= start) {
-      if (countBase) addMaterial(equipmentItemName(equipmentName, start), successes);
+    if (level <= baseLevelNumber) {
+      if (countBase) addMaterial(equipmentItemName(equipmentName, baseLevelNumber), successes);
       return;
     }
     if (stack.includes(level)) throw new Error(`升级材料存在循环引用：${equipmentName}${level}`);
@@ -393,7 +432,7 @@ function calculateUpgradePlan(equipmentName, fromLevel, toLevel, targetQuantity,
       };
       const materialLevel = sameEquipmentLevel(name, equipmentName);
       if (materialLevel === level - 1) hasExplicitPreviousEquipment = true;
-      if (materialLevel !== null && start < materialLevel && materialLevel < level) {
+      if (materialLevel !== null && baseLevelNumber < materialLevel && materialLevel < level) {
         expanded.push(name);
         expandLevel(materialLevel, required, [...stack, level], true);
       } else {
