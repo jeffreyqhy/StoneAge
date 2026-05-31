@@ -4,11 +4,13 @@ const state = {
   query: "",
 };
 
+const OFFICIAL_HERO_BODY = "回到尼斯大陆，召唤精灵、组建家族、挑战副本，把官方公告、攻略与资料入口集中在这里。";
+
 const DEFAULT_SITE = {
   meta: {
     title: "石器时代-精灵召唤",
     subtitle: "官方网站",
-    body: "经典回合、精灵养成、家族协作与活动公告统一整理。",
+    body: OFFICIAL_HERO_BODY,
     badge: "官方论坛",
     meta: { author: "烈焰部落 - 花儿", service_wechat: "djinhe" },
   },
@@ -20,7 +22,7 @@ const DEFAULT_SITE = {
   boards: [
     {
       title: "游戏下载",
-      body: "客户端下载、安卓包、iOS TestFlight 与社群入口。",
+      body: "客户端下载、安装说明与更新入口。",
       url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=2",
       badge: "下载",
       meta: {
@@ -99,7 +101,7 @@ const DEFAULT_SITE = {
     { title: "精灵召唤", body: "围绕精灵培养、练宠活动和长期成长路线做内容整理。", badge: "召唤" },
     { title: "装备打造", body: "资料库作为独立工具入口提供价格、出处、配方和升级路线计算。", badge: "打造" },
     { title: "家族协作", body: "家族收人、组队副本和攻略分享都可从官网入口进入。", badge: "家族" },
-    { title: "市场交易", body: "交易计算器收进工具区，首页只保留官方内容入口。", badge: "交易" },
+    { title: "市场交易", body: "交易税率计算器收进工具区，首页只保留官方内容入口。", badge: "交易" },
   ],
   links: [
     { title: "官方论坛", body: "公告、攻略、活动与客服入口", url: "https://www.djinhe.cn/", badge: "论坛" },
@@ -189,13 +191,13 @@ async function loadData() {
 
 function renderChrome() {
   const data = state.data;
-  const site = data.site || DEFAULT_SITE;
+  const site = DEFAULT_SITE;
   const meta = site.meta || {};
   const metaExtra = meta.meta || {};
   const counts = data.counts || {};
   $("#heroBadge").textContent = meta.subtitle || meta.badge || "官方资料站";
   $("#heroTitle").textContent = meta.title || "石器时代-精灵召唤";
-  $("#heroBody").textContent = meta.body || "经典回合、精灵养成、家族协作与活动公告统一整理。";
+  $("#heroBody").textContent = OFFICIAL_HERO_BODY;
   $("#heroAuthor").textContent = `作者：${metaExtra.author || "烈焰部落 - 花儿"}`;
   const download = findSiteItem(site, "游戏下载") || findSiteItem(site, "下载");
   if (download?.url) $("#heroDownloadLink").href = download.url;
