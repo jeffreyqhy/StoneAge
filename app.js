@@ -7,15 +7,88 @@ const state = {
 const DEFAULT_SITE = {
   meta: {
     title: "石器时代-精灵召唤",
-    subtitle: "官方资料站",
-    body: "精灵召唤、家族协作、装备打造与材料出处统一查询。",
+    subtitle: "官方网站",
+    body: "经典回合、精灵养成、家族协作与活动公告统一整理。",
     badge: "官方论坛",
-    meta: { author: "烈焰部落 - 花儿", sponsor: "战神部落族长 - 学长", service_wechat: "djinhe" },
+    meta: { author: "烈焰部落 - 花儿", service_wechat: "djinhe" },
   },
   stats: [
     { title: "游戏下载", body: "客户端下载与更新入口", url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=2", badge: "入口" },
     { title: "游戏公告", body: "版本更新与维护说明", url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=3", badge: "公告" },
     { title: "客服微信", body: "djinhe", url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=7", badge: "客服" },
+  ],
+  boards: [
+    {
+      title: "游戏下载",
+      body: "客户端下载、安卓包、iOS TestFlight 与社群入口。",
+      url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=2",
+      badge: "下载",
+      meta: {
+        posts: [
+          { title: "游戏下载", url: "https://www.djinhe.cn/forum.php?mod=viewthread&tid=1", author: "admin" },
+          { title: "下載", url: "https://www.djinhe.cn/forum.php?mod=viewthread&tid=16", author: "admin" },
+        ],
+      },
+    },
+    {
+      title: "游戏公告",
+      body: "版本更新、活动上下架、奖励调整与维护说明。",
+      url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=3",
+      badge: "公告",
+      meta: {
+        posts: [
+          { title: "4月4日21点不停机更新，如有争议将重新调整", url: "https://www.djinhe.cn/forum.php?mod=viewthread&tid=15", author: "admin" },
+          { title: "3月27日23点不停机更新，如有争议将重新调整", url: "https://www.djinhe.cn/forum.php?mod=viewthread&tid=14", author: "admin" },
+          { title: "3月23日14点30不停机更新", url: "https://www.djinhe.cn/forum.php?mod=viewthread&tid=13", author: "admin" },
+          { title: "3月21日15点不停机更新", url: "https://www.djinhe.cn/forum.php?mod=viewthread&tid=12", author: "admin" },
+          { title: "3月14日18点30不停机更新", url: "https://www.djinhe.cn/forum.php?mod=viewthread&tid=8", author: "admin" },
+          { title: "2月28日中午11点不停机更新", url: "https://www.djinhe.cn/forum.php?mod=viewthread&tid=7", author: "admin" },
+          { title: "2月14日18點不停機更新", url: "https://www.djinhe.cn/forum.php?mod=viewthread&tid=2", author: "admin" },
+        ],
+      },
+    },
+    {
+      title: "问题解答",
+      body: "客服与常见问题入口，后续可继续补充官方 FAQ。",
+      url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=4",
+      badge: "答疑",
+      meta: { posts: [{ title: "客服微信：djinhe", url: "https://www.djinhe.cn/forum.php?mod=viewthread&tid=3", author: "admin" }] },
+    },
+    {
+      title: "攻略分享",
+      body: "过滤玩家广告贴，只展示 admin 维护的攻略内容。",
+      url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=5",
+      badge: "攻略",
+      meta: { posts: [{ title: "游戏设置", url: "https://www.djinhe.cn/forum.php?mod=viewthread&tid=9", author: "admin" }] },
+    },
+    {
+      title: "练宠活动",
+      body: "练宠活动与奖励说明。",
+      url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=6",
+      badge: "活动",
+      meta: { posts: [{ title: "赤炼灵姬练宠活动", url: "https://www.djinhe.cn/forum.php?mod=viewthread&tid=4", author: "admin" }] },
+    },
+    {
+      title: "客服微信",
+      body: "官方客服微信入口。",
+      url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=7",
+      badge: "客服",
+      meta: { posts: [{ title: "客服微信", url: "https://www.djinhe.cn/forum.php?mod=viewthread&tid=6", author: "admin" }] },
+    },
+    {
+      title: "家族收人",
+      body: "家族招募与组队社群入口。",
+      url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=8",
+      badge: "家族",
+      meta: { posts: [] },
+    },
+    {
+      title: "来吉卡",
+      body: "来吉卡相关说明与活动入口。",
+      url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=9",
+      badge: "来吉卡",
+      meta: { posts: [{ title: "来吉卡", url: "https://www.djinhe.cn/forum.php?mod=viewthread&tid=5", author: "admin" }] },
+    },
   ],
   announcements: [
     { title: "4月4日21点不停机更新", body: "最新更新公告以官方论坛原帖为准。", url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=3", badge: "更新" },
@@ -24,9 +97,9 @@ const DEFAULT_SITE = {
   ],
   features: [
     { title: "精灵召唤", body: "围绕精灵培养、练宠活动和长期成长路线做内容整理。", badge: "召唤" },
-    { title: "装备打造", body: "公开材料库提供价格、出处、配方和升级路线计算。", badge: "打造" },
+    { title: "装备打造", body: "资料库作为独立工具入口提供价格、出处、配方和升级路线计算。", badge: "打造" },
     { title: "家族协作", body: "家族收人、组队副本和攻略分享都可从官网入口进入。", badge: "家族" },
-    { title: "市场交易", body: "交易钻石计算器保留在官网内，方便玩家快速换算到账与扣税。", badge: "交易" },
+    { title: "市场交易", body: "交易计算器收进工具区，首页只保留官方内容入口。", badge: "交易" },
   ],
   links: [
     { title: "官方论坛", body: "公告、攻略、活动与客服入口", url: "https://www.djinhe.cn/", badge: "论坛" },
@@ -45,6 +118,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function bindUi() {
+  bindToolsPanel();
   $("#searchButton").addEventListener("click", () => {
     state.query = $("#searchInput").value.trim();
     renderCurrentView();
@@ -73,6 +147,32 @@ function bindUi() {
   ].forEach((id) => {
     $(`#${id}`).addEventListener("input", renderCurrentView);
   });
+  if (location.hash === "#database" || location.hash === "#tools") openToolsPanel();
+  window.addEventListener("hashchange", () => {
+    if (location.hash === "#database" || location.hash === "#tools") openToolsPanel();
+  });
+}
+
+function bindToolsPanel() {
+  $$("[data-open-tools]").forEach((trigger) => {
+    trigger.addEventListener("click", (event) => {
+      event.preventDefault();
+      openToolsPanel(trigger.dataset.toolView || "");
+    });
+  });
+  $("#closeToolsButton").addEventListener("click", () => {
+    $("#database").classList.add("is-hidden");
+    document.querySelector("#tools").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
+function openToolsPanel(view = "") {
+  $("#database").classList.remove("is-hidden");
+  if (view) {
+    const tab = $(`.tab[data-view="${view}"]`);
+    if (tab) tab.click();
+  }
+  $("#database").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function loadData() {
@@ -95,16 +195,15 @@ function renderChrome() {
   const counts = data.counts || {};
   $("#heroBadge").textContent = meta.subtitle || meta.badge || "官方资料站";
   $("#heroTitle").textContent = meta.title || "石器时代-精灵召唤";
-  $("#heroBody").textContent = meta.body || "精灵召唤、家族协作、装备打造与材料出处统一查询。";
+  $("#heroBody").textContent = meta.body || "经典回合、精灵养成、家族协作与活动公告统一整理。";
   $("#heroAuthor").textContent = `作者：${metaExtra.author || "烈焰部落 - 花儿"}`;
-  $("#heroSponsor").textContent = `赞助：${metaExtra.sponsor || "战神部落族长 - 学长"}`;
   const download = findSiteItem(site, "游戏下载") || findSiteItem(site, "下载");
   if (download?.url) $("#heroDownloadLink").href = download.url;
-  $("#siteMeta").textContent = `资料更新：${formatDate(data.exported_at)} | ${fmtQty(data.diamond_per_rmb)} 钻 = 1 RMB`;
+  $("#siteMeta").textContent = "仅展示 admin 发布内容，所有详情以论坛原帖为准。";
   const siteStats = (site.stats || []).slice(0, 3).map((item) => [item.title, item.body || item.badge || ""]);
   const stats = [
     ...siteStats,
-    ["资料库", `${fmtQty((counts.materials || 0) + (counts.source_items || 0))} 条`],
+    ["资料工具", `${fmtQty((counts.materials || 0) + (counts.source_items || 0))} 条数据`],
   ].slice(0, 4);
   $("#summaryStrip").replaceChildren(...stats.map(([label, value]) => {
     const node = document.createElement("div");
@@ -112,9 +211,36 @@ function renderChrome() {
     node.append(el("span", label), el("strong", String(value)));
     return node;
   }));
-  renderOfficialCards("#officialAnnouncements", site.announcements || [], "news-card");
+  renderForumBoards(site.boards || DEFAULT_SITE.boards || []);
   renderOfficialCards("#featureGrid", site.features || [], "feature-card");
   renderOfficialLinks(site.links || []);
+}
+
+function renderForumBoards(boards) {
+  const cards = boards.map((board) => {
+    const card = document.createElement("article");
+    card.className = "board-card";
+    const titleLink = document.createElement("a");
+    titleLink.href = board.url || "#home";
+    titleLink.target = board.url ? "_blank" : "";
+    titleLink.rel = board.url ? "noopener" : "";
+    titleLink.append(el("span", board.badge || "板块", "badge"), el("h3", board.title || "未命名板块"));
+    const posts = (board.meta?.posts || []).filter((post) => post.author === "admin");
+    const list = document.createElement("div");
+    list.className = "post-list";
+    posts.slice(0, 6).forEach((post) => {
+      const link = document.createElement("a");
+      link.href = post.url || board.url || "#home";
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = post.title || "未命名内容";
+      list.append(link);
+    });
+    if (!posts.length) list.append(el("span", "暂无 admin 发布内容，等待官方补充。", "muted"));
+    card.append(titleLink, el("p", board.body || ""), list);
+    return card;
+  });
+  $("#forumBoards").replaceChildren(...(cards.length ? cards : [empty("暂无论坛板块。")]));
 }
 
 function renderOfficialCards(selector, items, className) {
