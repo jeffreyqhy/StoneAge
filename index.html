@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>石器时代材料库</title>
+    <title>石器时代-精灵召唤</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="app.js" defer></script>
   </head>
@@ -11,7 +11,11 @@
     <header class="hero">
       <div class="hero-copy">
         <p class="eyebrow">公开资料库</p>
-        <h1>石器时代材料库</h1>
+        <h1>石器时代-精灵召唤</h1>
+        <div class="credits">
+          <span>作者：烈焰部落 - 花儿</span>
+          <span>赞助：战神部落族长 - 学长</span>
+        </div>
         <p id="siteMeta">正在载入资料...</p>
       </div>
       <div class="summary-strip" id="summaryStrip"></div>
@@ -28,6 +32,7 @@
           <button class="tab" data-view="sources">出处</button>
           <button class="tab" data-view="recipes">配方</button>
           <button class="tab" data-view="upgrades">升级</button>
+          <button class="tab" data-view="trade">交易</button>
         </div>
       </section>
 
@@ -70,6 +75,38 @@
           </div>
         </div>
         <div id="upgradeCards" class="card-grid"></div>
+      </section>
+
+      <section id="view-trade" class="view">
+        <div class="section-head">
+          <h2>交易钻石计算</h2>
+          <span id="tradeRatioLabel"></span>
+        </div>
+        <div class="tool-grid">
+          <article class="tool-panel">
+            <h3>按到账反推</h3>
+            <div class="tool-form">
+              <label>希望对方到账 <input id="tradeTargetNet" type="number" min="0" value="10000" /></label>
+              <label>交易税率 <input id="tradeTaxRate" type="number" min="0" max="99" step="0.1" value="5" /></label>
+            </div>
+            <div class="result-grid">
+              <div class="result-box"><span>需要交易</span><strong id="tradeRequiredGross">-</strong></div>
+              <div class="result-box"><span>扣税</span><strong id="tradeRequiredTax">-</strong></div>
+              <div class="result-box"><span>预计到账</span><strong id="tradeGuaranteedNet">-</strong></div>
+            </div>
+          </article>
+          <article class="tool-panel">
+            <h3>按实际交易计算</h3>
+            <div class="tool-form">
+              <label>实际交易 <input id="tradeGross" type="number" min="0" value="10000" /></label>
+            </div>
+            <div class="result-grid">
+              <div class="result-box"><span>对方收到</span><strong id="tradeActualNet">-</strong></div>
+              <div class="result-box"><span>扣税</span><strong id="tradeActualTax">-</strong></div>
+              <div class="result-box"><span>折合 RMB</span><strong id="tradeActualRmb">-</strong></div>
+            </div>
+          </article>
+        </div>
       </section>
     </main>
   </body>
