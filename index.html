@@ -4,110 +4,167 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>石器时代-精灵召唤</title>
-    <link rel="stylesheet" href="styles.css?v=20260531-route" />
-    <script src="app.js?v=20260531-route" defer></script>
+    <meta name="description" content="石器时代-精灵召唤官方网站，提供公告、下载、攻略入口、材料库、升级计算与交易钻石计算。" />
+    <link rel="stylesheet" href="styles.css?v=20260531-official" />
+    <script src="app.js?v=20260531-official" defer></script>
   </head>
   <body>
-    <header class="hero">
-      <div class="hero-copy">
-        <p class="eyebrow">公开资料库</p>
-        <h1>石器时代-精灵召唤</h1>
-        <div class="credits">
-          <span>作者：烈焰部落 - 花儿</span>
-          <span>赞助：战神部落族长 - 学长</span>
+    <header class="site-hero" id="home">
+      <nav class="site-nav" aria-label="主导航">
+        <a class="brand-mark" href="#home">石器时代-精灵召唤</a>
+        <div class="nav-links">
+          <a href="#news">公告</a>
+          <a href="#features">特色</a>
+          <a href="#download">下载</a>
+          <a href="#database">资料库</a>
         </div>
-        <p id="siteMeta">正在载入资料...</p>
+      </nav>
+
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow" id="heroBadge">官方资料站</p>
+          <h1 id="heroTitle">石器时代-精灵召唤</h1>
+          <p id="heroBody">精灵召唤、家族协作、装备打造与材料出处统一查询。</p>
+          <div class="credits">
+            <span id="heroAuthor">作者：烈焰部落 - 花儿</span>
+            <span id="heroSponsor">赞助：战神部落族长 - 学长</span>
+          </div>
+          <div class="hero-actions">
+            <a class="primary-action" href="#database">进入资料库</a>
+            <a class="secondary-action" id="heroDownloadLink" href="https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=2" target="_blank" rel="noopener">游戏下载</a>
+          </div>
+        </div>
+        <div class="summary-strip" id="summaryStrip"></div>
       </div>
-      <div class="summary-strip" id="summaryStrip"></div>
     </header>
 
-    <main class="shell">
-      <section class="search-band">
-        <div class="search-row">
-          <input id="searchInput" type="search" placeholder="搜索材料、出处、配方或装备" autocomplete="off" />
-          <button id="searchButton">搜索</button>
+    <main>
+      <section class="official-section intro-band" id="news">
+        <div class="section-title">
+          <p>News</p>
+          <h2>官方动态</h2>
+          <span id="siteMeta">正在载入资料...</span>
         </div>
-        <div class="tabs" role="tablist">
-          <button class="tab active" data-view="materials">材料</button>
-          <button class="tab" data-view="sources">出处</button>
-          <button class="tab" data-view="recipes">配方</button>
-          <button class="tab" data-view="upgrades">升级</button>
-          <button class="tab" data-view="trade">交易</button>
-        </div>
+        <div class="news-grid" id="officialAnnouncements"></div>
       </section>
 
-      <section id="view-materials" class="view active">
-        <div class="section-head">
-          <h2>材料价格与出处</h2>
-          <span id="materialsCount"></span>
+      <section class="official-section" id="features">
+        <div class="section-title">
+          <p>Game</p>
+          <h2>游戏特色</h2>
+          <span>召唤、打造、家族、交易，核心入口统一整理。</span>
         </div>
-        <div class="table-wrap">
-          <table id="materialsTable"></table>
-        </div>
+        <div class="feature-grid" id="featureGrid"></div>
       </section>
 
-      <section id="view-sources" class="view">
-        <div class="section-head">
-          <h2>出处掉落</h2>
-          <span id="sourcesCount"></span>
+      <section class="official-section download-band" id="download">
+        <div class="download-copy">
+          <p>Portal</p>
+          <h2>下载与社群</h2>
+          <span>现有官方内容来自论坛，官网保留直达入口，后续可替换成 GM 提供的域名、下载链接和客服二维码。</span>
         </div>
-        <div id="sourceGroups" class="source-grid"></div>
+        <div class="link-grid" id="officialLinks"></div>
       </section>
 
-      <section id="view-recipes" class="view">
-        <div class="section-head">
-          <h2>配方计算</h2>
-          <div class="inline-form">
-            <label>目标数量 <input id="recipeTargetQty" type="number" min="1" value="1" /></label>
-            <label>稳妥 <select id="recipeConfidence"><option value="0.90">90%</option><option value="0.95" selected>95%</option><option value="0.99">99%</option></select></label>
+      <section class="database-shell" id="database">
+        <div class="database-head">
+          <p>Database</p>
+          <h2>资料库工具</h2>
+          <span>材料价格、出处掉落、配方成本、装备升级路线和交易钻石扣税。</span>
+        </div>
+
+        <section class="search-band">
+          <div class="search-row">
+            <input id="searchInput" type="search" placeholder="搜索材料、出处、配方或装备" autocomplete="off" />
+            <button id="searchButton">搜索</button>
           </div>
-        </div>
-        <div id="recipeCards" class="card-grid"></div>
-      </section>
-
-      <section id="view-upgrades" class="view">
-        <div class="section-head">
-          <h2>升级材料</h2>
-          <div class="inline-form">
-            <label>起始 <input id="upgradeFrom" type="number" min="0" value="0" /></label>
-            <label>目标 <input id="upgradeTo" type="number" min="1" value="20" /></label>
-            <label>稳妥 <select id="upgradeConfidence"><option value="0.90">90%</option><option value="0.95" selected>95%</option><option value="0.99">99%</option></select></label>
+          <div class="tabs" role="tablist">
+            <button class="tab active" data-view="materials">材料</button>
+            <button class="tab" data-view="sources">出处</button>
+            <button class="tab" data-view="recipes">配方</button>
+            <button class="tab" data-view="upgrades">升级</button>
+            <button class="tab" data-view="trade">交易</button>
           </div>
-        </div>
-        <div id="upgradeCards" class="card-grid"></div>
-      </section>
+        </section>
 
-      <section id="view-trade" class="view">
-        <div class="section-head">
-          <h2>交易钻石计算</h2>
-          <span id="tradeRatioLabel"></span>
-        </div>
-        <div class="tool-grid">
-          <article class="tool-panel">
-            <h3>按到账反推</h3>
-            <div class="tool-form">
-              <label>希望对方到账 <input id="tradeTargetNet" type="number" min="0" value="10000" /></label>
-              <label>交易税率 <input id="tradeTaxRate" type="number" min="0" max="99" step="0.1" value="5" /></label>
+        <section id="view-materials" class="view active">
+          <div class="section-head">
+            <h2>材料价格与出处</h2>
+            <span id="materialsCount"></span>
+          </div>
+          <div class="table-wrap">
+            <table id="materialsTable"></table>
+          </div>
+        </section>
+
+        <section id="view-sources" class="view">
+          <div class="section-head">
+            <h2>出处掉落</h2>
+            <span id="sourcesCount"></span>
+          </div>
+          <div id="sourceGroups" class="source-grid"></div>
+        </section>
+
+        <section id="view-recipes" class="view">
+          <div class="section-head">
+            <h2>配方计算</h2>
+            <div class="inline-form">
+              <label>目标数量 <input id="recipeTargetQty" type="number" min="1" value="1" /></label>
+              <label>稳妥 <select id="recipeConfidence"><option value="0.90">90%</option><option value="0.95" selected>95%</option><option value="0.99">99%</option></select></label>
             </div>
-            <div class="result-grid">
-              <div class="result-box"><span>需要交易</span><strong id="tradeRequiredGross">-</strong></div>
-              <div class="result-box"><span>扣税</span><strong id="tradeRequiredTax">-</strong></div>
-              <div class="result-box"><span>预计到账</span><strong id="tradeGuaranteedNet">-</strong></div>
+          </div>
+          <div id="recipeCards" class="card-grid"></div>
+        </section>
+
+        <section id="view-upgrades" class="view">
+          <div class="section-head">
+            <h2>升级材料</h2>
+            <div class="inline-form">
+              <label>起始 <input id="upgradeFrom" type="number" min="0" value="0" /></label>
+              <label>目标 <input id="upgradeTo" type="number" min="1" value="20" /></label>
+              <label>稳妥 <select id="upgradeConfidence"><option value="0.90">90%</option><option value="0.95" selected>95%</option><option value="0.99">99%</option></select></label>
             </div>
-          </article>
-          <article class="tool-panel">
-            <h3>按实际交易计算</h3>
-            <div class="tool-form">
-              <label>实际交易 <input id="tradeGross" type="number" min="0" value="10000" /></label>
-            </div>
-            <div class="result-grid">
-              <div class="result-box"><span>对方收到</span><strong id="tradeActualNet">-</strong></div>
-              <div class="result-box"><span>扣税</span><strong id="tradeActualTax">-</strong></div>
-              <div class="result-box"><span>折合 RMB</span><strong id="tradeActualRmb">-</strong></div>
-            </div>
-          </article>
-        </div>
+          </div>
+          <div id="upgradeCards" class="card-grid"></div>
+        </section>
+
+        <section id="view-trade" class="view">
+          <div class="section-head">
+            <h2>交易钻石计算</h2>
+            <span id="tradeRatioLabel"></span>
+          </div>
+          <div class="tool-grid">
+            <article class="tool-panel">
+              <h3>按到账反推</h3>
+              <div class="tool-form">
+                <label>希望对方到账 <input id="tradeTargetNet" type="number" min="0" value="10000" /></label>
+                <label>交易税率 <input id="tradeTaxRate" type="number" min="0" max="99" step="0.1" value="5" /></label>
+              </div>
+              <div class="result-grid">
+                <div class="result-box"><span>需要交易</span><strong id="tradeRequiredGross">-</strong></div>
+                <div class="result-box"><span>扣税</span><strong id="tradeRequiredTax">-</strong></div>
+                <div class="result-box"><span>预计到账</span><strong id="tradeGuaranteedNet">-</strong></div>
+              </div>
+            </article>
+            <article class="tool-panel">
+              <h3>按实际交易计算</h3>
+              <div class="tool-form">
+                <label>实际交易 <input id="tradeGross" type="number" min="0" value="10000" /></label>
+              </div>
+              <div class="result-grid">
+                <div class="result-box"><span>对方收到</span><strong id="tradeActualNet">-</strong></div>
+                <div class="result-box"><span>扣税</span><strong id="tradeActualTax">-</strong></div>
+                <div class="result-box"><span>折合 RMB</span><strong id="tradeActualRmb">-</strong></div>
+              </div>
+            </article>
+          </div>
+        </section>
       </section>
     </main>
+
+    <footer class="site-footer">
+      <span>石器时代-精灵召唤</span>
+      <a href="https://www.djinhe.cn/" target="_blank" rel="noopener">官方论坛</a>
+    </footer>
   </body>
 </html>
