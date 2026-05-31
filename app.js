@@ -4,6 +4,38 @@ const state = {
   query: "",
 };
 
+const DEFAULT_SITE = {
+  meta: {
+    title: "石器时代-精灵召唤",
+    subtitle: "官方资料站",
+    body: "精灵召唤、家族协作、装备打造与材料出处统一查询。",
+    badge: "官方论坛",
+    meta: { author: "烈焰部落 - 花儿", sponsor: "战神部落族长 - 学长", service_wechat: "djinhe" },
+  },
+  stats: [
+    { title: "游戏下载", body: "客户端下载与更新入口", url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=2", badge: "入口" },
+    { title: "游戏公告", body: "版本更新与维护说明", url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=3", badge: "公告" },
+    { title: "客服微信", body: "djinhe", url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=7", badge: "客服" },
+  ],
+  announcements: [
+    { title: "4月4日21点不停机更新", body: "最新更新公告以官方论坛原帖为准。", url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=3", badge: "更新" },
+    { title: "游戏下载", body: "客户端下载、补丁与安装说明集中在论坛下载版块。", url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=2", badge: "下载" },
+    { title: "赤炼灵姬练宠活动", body: "活动规则与奖励以论坛活动帖为准。", url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=6", badge: "活动" },
+  ],
+  features: [
+    { title: "精灵召唤", body: "围绕精灵培养、练宠活动和长期成长路线做内容整理。", badge: "召唤" },
+    { title: "装备打造", body: "公开材料库提供价格、出处、配方和升级路线计算。", badge: "打造" },
+    { title: "家族协作", body: "家族收人、组队副本和攻略分享都可从官网入口进入。", badge: "家族" },
+    { title: "市场交易", body: "交易钻石计算器保留在官网内，方便玩家快速换算到账与扣税。", badge: "交易" },
+  ],
+  links: [
+    { title: "官方论坛", body: "公告、攻略、活动与客服入口", url: "https://www.djinhe.cn/", badge: "论坛" },
+    { title: "攻略分享", body: "玩家经验与副本资料", url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=5", badge: "攻略" },
+    { title: "家族收人", body: "家族招募与组队信息", url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=8", badge: "家族" },
+    { title: "来吉卡", body: "相关活动与说明", url: "https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=9", badge: "活动" },
+  ],
+};
+
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
@@ -57,20 +89,77 @@ async function loadData() {
 
 function renderChrome() {
   const data = state.data;
+  const site = data.site || DEFAULT_SITE;
+  const meta = site.meta || {};
+  const metaExtra = meta.meta || {};
   const counts = data.counts || {};
-  $("#siteMeta").textContent = `更新：${formatDate(data.exported_at)} | ${fmtQty(data.diamond_per_rmb)} 钻 = 1 RMB`;
+  $("#heroBadge").textContent = meta.subtitle || meta.badge || "官方资料站";
+  $("#heroTitle").textContent = meta.title || "石器时代-精灵召唤";
+  $("#heroBody").textContent = meta.body || "精灵召唤、家族协作、装备打造与材料出处统一查询。";
+  $("#heroAuthor").textContent = `作者：${metaExtra.author || "烈焰部落 - 花儿"}`;
+  $("#heroSponsor").textContent = `赞助：${metaExtra.sponsor || "战神部落族长 - 学长"}`;
+  const download = findSiteItem(site, "游戏下载") || findSiteItem(site, "下载");
+  if (download?.url) $("#heroDownloadLink").href = download.url;
+  $("#siteMeta").textContent = `资料更新：${formatDate(data.exported_at)} | ${fmtQty(data.diamond_per_rmb)} 钻 = 1 RMB`;
+  const siteStats = (site.stats || []).slice(0, 3).map((item) => [item.title, item.body || item.badge || ""]);
   const stats = [
-    ["材料", counts.materials || 0],
-    ["出处", counts.source_items || 0],
-    ["配方", counts.recipes || 0],
-    ["升级", counts.upgrade_steps || 0],
-  ];
+    ...siteStats,
+    ["资料库", `${fmtQty((counts.materials || 0) + (counts.source_items || 0))} 条`],
+  ].slice(0, 4);
   $("#summaryStrip").replaceChildren(...stats.map(([label, value]) => {
     const node = document.createElement("div");
     node.className = "summary-card";
     node.append(el("span", label), el("strong", String(value)));
     return node;
   }));
+  renderOfficialCards("#officialAnnouncements", site.announcements || [], "news-card");
+  renderOfficialCards("#featureGrid", site.features || [], "feature-card");
+  renderOfficialLinks(site.links || []);
+}
+
+function renderOfficialCards(selector, items, className) {
+  const cards = items.map((item) => {
+    const card = document.createElement(item.url ? "a" : "article");
+    card.className = className;
+    if (item.url) {
+      card.href = item.url;
+      card.target = "_blank";
+      card.rel = "noopener";
+    }
+    card.append(
+      el("span", item.badge || item.subtitle || "官方", "badge"),
+      el("h3", item.title || "未命名"),
+      el("p", item.body || item.subtitle || ""),
+    );
+    return card;
+  });
+  $(selector).replaceChildren(...(cards.length ? cards : [empty("暂无资料。")]));
+}
+
+function renderOfficialLinks(items) {
+  const cards = items.map((item) => {
+    const link = document.createElement("a");
+    link.className = "link-card";
+    link.href = item.url || "#home";
+    link.target = item.url ? "_blank" : "";
+    link.rel = item.url ? "noopener" : "";
+    link.append(
+      el("span", item.badge || "入口", "badge"),
+      el("h3", item.title || "入口"),
+      el("p", item.body || ""),
+    );
+    return link;
+  });
+  $("#officialLinks").replaceChildren(...(cards.length ? cards : [empty("暂无入口。")]));
+}
+
+function findSiteItem(site, text) {
+  const sections = ["stats", "announcements", "links"];
+  for (const section of sections) {
+    const item = (site[section] || []).find((row) => `${row.title || ""}${row.badge || ""}`.includes(text));
+    if (item) return item;
+  }
+  return null;
 }
 
 function renderCurrentView() {
