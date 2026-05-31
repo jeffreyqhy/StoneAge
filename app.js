@@ -29,7 +29,16 @@ function bindUi() {
       renderCurrentView();
     });
   });
-  ["recipeTargetQty", "recipeConfidence", "upgradeFrom", "upgradeTo", "upgradeConfidence"].forEach((id) => {
+  [
+    "recipeTargetQty",
+    "recipeConfidence",
+    "upgradeFrom",
+    "upgradeTo",
+    "upgradeConfidence",
+    "tradeTargetNet",
+    "tradeTaxRate",
+    "tradeGross",
+  ].forEach((id) => {
     $(`#${id}`).addEventListener("input", renderCurrentView);
   });
 }
@@ -70,6 +79,7 @@ function renderCurrentView() {
   if (state.view === "sources") renderSources();
   if (state.view === "recipes") renderRecipes();
   if (state.view === "upgrades") renderUpgrades();
+  if (state.view === "trade") renderTradeTool();
 }
 
 function renderMaterials() {
@@ -202,6 +212,25 @@ function renderUpgradeCard(equipmentName, fromLevel, toLevel, confidence) {
     ],
     materialText,
   );
+}
+
+function renderTradeTool() {
+  const ratePercent = Number($("#tradeTaxRate").value || 0);
+  const rate = Math.max(0, Math.min(99, ratePercent)) / 100;
+  const targetNet = Math.max(0, Number($("#tradeTargetNet").value || 0));
+  const gross = Math.max(0, Number($("#tradeGross").value || 0));
+  const requiredGross = requiredTradeGrossForNet(targetNet, rate);
+  const guaranteedNet = netAfterTradeTax(requiredGross, rate);
+  const requiredTax = tradeTaxAmount(requiredGross, rate);
+  const actualNet = netAfterTradeTax(gross, rate);
+  const actualTax = tradeTaxAmount(gross, rate);
+  $("#tradeRatioLabel").textContent = `${fmtQty(state.data.diamond_per_rmb)} 钻 = 1 RMB`;
+  $("#tradeRequiredGross").textContent = `${fmtQty(requiredGross)} 钻`;
+  $("#tradeRequiredTax").textContent = `${fmtQty(requiredTax)} 钻`;
+  $("#tradeGuaranteedNet").textContent = `${fmtQty(guaranteedNet)} 钻`;
+  $("#tradeActualNet").textContent = `${fmtQty(actualNet)} 钻`;
+  $("#tradeActualTax").textContent = `${fmtQty(actualTax)} 钻`;
+  $("#tradeActualRmb").textContent = `${fmtRmb(actualNet / Number(state.data.diamond_per_rmb || 500))} RMB`;
 }
 
 function renderTable(selector, columns, rows) {
@@ -444,6 +473,21 @@ function sourcesOf(name) {
 
 function ceilQty(value) {
   return Math.ceil(Math.max(0, Number(value || 0)) - 1e-12);
+}
+
+function netAfterTradeTax(grossDiamonds, taxRate) {
+  return Math.floor(Math.max(0, Number(grossDiamonds || 0)) * (1 - taxRate));
+}
+
+function requiredTradeGrossForNet(netDiamonds, taxRate) {
+  const net = Math.max(0, Number(netDiamonds || 0));
+  if (net <= 0) return 0;
+  return Math.ceil(net / (1 - taxRate));
+}
+
+function tradeTaxAmount(grossDiamonds, taxRate) {
+  const gross = Math.ceil(Math.max(0, Number(grossDiamonds || 0)));
+  return gross - netAfterTradeTax(gross, taxRate);
 }
 
 function attemptsForConfidence(successes, successRate, confidence) {
