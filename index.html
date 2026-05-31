@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>石器时代材料库</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">公开资料库</p>
+        <h1>石器时代材料库</h1>
+        <p id="siteMeta">正在载入资料...</p>
+      </div>
+      <div class="summary-strip" id="summaryStrip"></div>
+    </header>
+
+    <main class="shell">
+      <section class="search-band">
+        <div class="search-row">
+          <input id="searchInput" type="search" placeholder="搜索材料、出处、配方或装备" autocomplete="off" />
+          <button id="searchButton">搜索</button>
+        </div>
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-view="materials">材料</button>
+          <button class="tab" data-view="sources">出处</button>
+          <button class="tab" data-view="recipes">配方</button>
+          <button class="tab" data-view="upgrades">升级</button>
+        </div>
+      </section>
+
+      <section id="view-materials" class="view active">
+        <div class="section-head">
+          <h2>材料价格与出处</h2>
+          <span id="materialsCount"></span>
+        </div>
+        <div class="table-wrap">
+          <table id="materialsTable"></table>
+        </div>
+      </section>
+
+      <section id="view-sources" class="view">
+        <div class="section-head">
+          <h2>出处掉落</h2>
+          <span id="sourcesCount"></span>
+        </div>
+        <div id="sourceGroups" class="source-grid"></div>
+      </section>
+
+      <section id="view-recipes" class="view">
+        <div class="section-head">
+          <h2>配方计算</h2>
+          <div class="inline-form">
+            <label>目标数量 <input id="recipeTargetQty" type="number" min="1" value="1" /></label>
+            <label>稳妥 <select id="recipeConfidence"><option value="0.90">90%</option><option value="0.95" selected>95%</option><option value="0.99">99%</option></select></label>
+          </div>
+        </div>
+        <div id="recipeCards" class="card-grid"></div>
+      </section>
+
+      <section id="view-upgrades" class="view">
+        <div class="section-head">
+          <h2>升级材料</h2>
+          <div class="inline-form">
+            <label>起始 <input id="upgradeFrom" type="number" min="0" value="0" /></label>
+            <label>目标 <input id="upgradeTo" type="number" min="1" value="20" /></label>
+            <label>稳妥 <select id="upgradeConfidence"><option value="0.90">90%</option><option value="0.95" selected>95%</option><option value="0.99">99%</option></select></label>
+          </div>
+        </div>
+        <div id="upgradeCards" class="card-grid"></div>
+      </section>
+    </main>
+  </body>
+</html>
