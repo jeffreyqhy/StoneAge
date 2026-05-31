@@ -4,19 +4,19 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>石器时代-精灵召唤</title>
-    <meta name="description" content="石器时代-精灵召唤官方网站，提供公告、下载、攻略入口、材料库、升级计算与交易钻石计算。" />
-    <link rel="stylesheet" href="styles.css?v=20260531-official" />
-    <script src="app.js?v=20260531-official" defer></script>
+    <meta name="description" content="石器时代-精灵召唤官方网站，提供公告、下载、攻略、活动、客服与资料库工具入口。" />
+    <link rel="stylesheet" href="styles.css?v=20260531-forum" />
+    <script src="app.js?v=20260531-forum" defer></script>
   </head>
   <body>
     <header class="site-hero" id="home">
       <nav class="site-nav" aria-label="主导航">
         <a class="brand-mark" href="#home">石器时代-精灵召唤</a>
         <div class="nav-links">
-          <a href="#news">公告</a>
+          <a href="#boards">论坛板块</a>
           <a href="#features">特色</a>
           <a href="#download">下载</a>
-          <a href="#database">资料库</a>
+          <a href="#tools" data-open-tools>资料工具</a>
         </div>
       </nav>
 
@@ -24,13 +24,12 @@
         <div class="hero-copy">
           <p class="eyebrow" id="heroBadge">官方资料站</p>
           <h1 id="heroTitle">石器时代-精灵召唤</h1>
-          <p id="heroBody">精灵召唤、家族协作、装备打造与材料出处统一查询。</p>
+          <p id="heroBody">经典回合、精灵养成、家族协作与活动公告统一整理。</p>
           <div class="credits">
             <span id="heroAuthor">作者：烈焰部落 - 花儿</span>
-            <span id="heroSponsor">赞助：战神部落族长 - 学长</span>
           </div>
           <div class="hero-actions">
-            <a class="primary-action" href="#database">进入资料库</a>
+            <a class="primary-action" href="https://www.djinhe.cn/" target="_blank" rel="noopener">进入论坛</a>
             <a class="secondary-action" id="heroDownloadLink" href="https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=2" target="_blank" rel="noopener">游戏下载</a>
           </div>
         </div>
@@ -39,20 +38,20 @@
     </header>
 
     <main>
-      <section class="official-section intro-band" id="news">
+      <section class="official-section intro-band" id="boards">
         <div class="section-title">
-          <p>News</p>
-          <h2>官方动态</h2>
+          <p>Forum</p>
+          <h2>论坛板块</h2>
           <span id="siteMeta">正在载入资料...</span>
         </div>
-        <div class="news-grid" id="officialAnnouncements"></div>
+        <div class="board-grid" id="forumBoards"></div>
       </section>
 
       <section class="official-section" id="features">
         <div class="section-title">
           <p>Game</p>
           <h2>游戏特色</h2>
-          <span>召唤、打造、家族、交易，核心入口统一整理。</span>
+          <span>把论坛里真正由 admin 维护的内容整理到官网，玩家先看到官方信息。</span>
         </div>
         <div class="feature-grid" id="featureGrid"></div>
       </section>
@@ -66,11 +65,34 @@
         <div class="link-grid" id="officialLinks"></div>
       </section>
 
-      <section class="database-shell" id="database">
+      <section class="official-section tools-gateway" id="tools">
+        <div class="section-title">
+          <p>Tools</p>
+          <h2>资料工具入口</h2>
+          <span>资料库、升级计算和交易计算作为工具区收起，需要时再打开，不占官网首页主视觉。</span>
+        </div>
+        <div class="tool-entry-grid">
+          <button class="tool-entry" type="button" data-open-tools data-tool-view="materials">
+            <span>资料库</span>
+            <strong>材料 / 出处 / 配方</strong>
+          </button>
+          <button class="tool-entry" type="button" data-open-tools data-tool-view="upgrades">
+            <span>升级计算</span>
+            <strong>装备升级路线与成本</strong>
+          </button>
+          <button class="tool-entry" type="button" data-open-tools data-tool-view="trade">
+            <span>交易计算</span>
+            <strong>扣税与到账反推</strong>
+          </button>
+        </div>
+      </section>
+
+      <section class="database-shell is-hidden" id="database">
         <div class="database-head">
           <p>Database</p>
           <h2>资料库工具</h2>
-          <span>材料价格、出处掉落、配方成本、装备升级路线和交易钻石扣税。</span>
+          <span>材料价格、出处掉落、配方成本、装备升级路线和交易扣税。</span>
+          <button id="closeToolsButton" class="ghost-button" type="button">收起工具</button>
         </div>
 
         <section class="search-band">
