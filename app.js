@@ -164,42 +164,41 @@ function renderUpgrades() {
 }
 
 function renderUpgradeCard(equipmentName, fromLevel, toLevel, confidence) {
-  const steps = (state.data.upgrades || []).filter((step) => {
-    return step.equipment_name === equipmentName && Number(step.from_level) >= fromLevel && Number(step.to_level) <= toLevel;
-  }).sort((a, b) => Number(a.from_level) - Number(b.from_level));
-  if (!steps.length) return null;
-  const expectedMaterials = new Map();
-  const safeMaterials = new Map();
-  let standardDirect = 0;
-  let expectedDirect = 0;
-  let safeDirect = 0;
-  for (const step of steps) {
-    const rate = rateValue(step.success_rate);
-    const expectedAttempts = 1 / rate;
-    const safeAttempts = attemptsForConfidence(1, rate, confidence);
-    standardDirect += Number(step.diamond_cost || 0);
-    expectedDirect += Number(step.diamond_cost || 0) * (step.failure_consumes_diamonds ? expectedAttempts : 1);
-    safeDirect += Number(step.diamond_cost || 0) * (step.failure_consumes_diamonds ? safeAttempts : 1);
-    for (const material of step.materials || []) {
-      const name = material.material_name;
-      const qty = Number(material.quantity || 0);
-      addMap(expectedMaterials, name, qty * (step.failure_consumes_materials ? expectedAttempts : 1));
-      addMap(safeMaterials, name, qty * (step.failure_consumes_materials ? safeAttempts : 1));
-    }
+  const steps = (state.data.upgrades || []).filter((step) => step.equipment_name === equipmentName);
+  if (!steps.some((step) => Number(step.from_level) >= fromLevel && Number(step.to_level) <= toLevel)) return null;
+  const plan = calculateUpgradePlan(equipmentName, fromLevel, toLevel, 1, confidence);
+  if (plan.missing.length) {
+    return infoCard(
+      equipmentName,
+      `${fromLevel} -> ${toLevel}`,
+      [["缺少资料", plan.missing.join(" / ")]],
+      plan.missing.map((item) => `缺少升级步骤：${item}`),
+    );
   }
-  const expectedTotal = costMap(expectedMaterials) + expectedDirect;
-  const safeTotal = costMap(safeMaterials) + safeDirect;
-  const materialText = Array.from(safeMaterials.entries()).map(([name, qty]) => {
-    const price = priceOf(name);
-    return `${name} x${fmtQty(qty)}${price ? ` · 单价 ${fmtQty(price.price_diamonds)}钻` : " · 暂无价格"}`;
-  });
+  const comparison = marketComparison(equipmentName, toLevel, plan.costs.safe, 1);
+  const materialText = [
+    `结论：自己合成 ${money(plan.costs.safe)}；${comparison}`,
+    "底层材料（中间装备已展开）",
+    ...plan.materials.map((row) => {
+      const price = priceOf(row.name);
+      return `${row.name} x${fmtQty(row.safe)}${price ? ` · 单价 ${fmtQty(price.price_diamonds)}钻 · 合计 ${money(row.safe * Number(price.price_diamonds || 0))}` : " · 暂无价格"}`;
+    }),
+    "材料出处",
+    ...plan.materials.map((row) => `${row.name}：${sourcesOf(row.name).slice(0, 8).join(" / ") || "暂无出处资料"}`),
+    "算法依据",
+    ...(plan.expanded.length ? [`已展开：${Array.from(new Set(plan.expanded)).join(" / ")}`] : ["未发现中间装备。"]),
+    ...plan.details.map((detail) => {
+      const step = detail.step;
+      return `${step.from_level} -> ${step.to_level}：成功率 ${(rateValue(step.success_rate) * 100).toFixed(2)}%，稳妥尝试 ${fmtQty(detail.diamondAttempts.safe)} 次`;
+    }),
+  ];
   return infoCard(
     equipmentName,
-    `${fromLevel} -> ${toLevel}，匹配 ${steps.length} 个升级步骤`,
+    `${fromLevel} -> ${toLevel}，自己合成 vs 直接买`,
     [
-      ["直接钻石", money(standardDirect)],
-      ["期望总成本", money(expectedTotal)],
-      [`${Math.round(confidence * 100)}% 稳妥`, money(safeTotal)],
+      ["标准成本", money(plan.costs.standard)],
+      ["期望成本", money(plan.costs.expected)],
+      [`${Math.round(confidence * 100)}% 稳妥`, money(plan.costs.safe)],
     ],
     materialText,
   );
@@ -289,6 +288,164 @@ function costMap(map) {
   return total;
 }
 
+function calculateUpgradePlan(equipmentName, fromLevel, toLevel, targetQuantity, confidence) {
+  const start = Number(fromLevel);
+  const end = Number(toLevel);
+  const stepsByFrom = new Map();
+  const missing = [];
+  for (const step of state.data.upgrades || []) {
+    if (step.equipment_name === equipmentName) stepsByFrom.set(Number(step.from_level), step);
+  }
+  for (let level = start; level < end; level += 1) {
+    if (!stepsByFrom.has(level)) missing.push(`${level} -> ${level + 1}`);
+  }
+  if (missing.length) return { missing };
+
+  const aggregate = new Map();
+  const direct = { standard: 0, expected: 0, safe: 0 };
+  const detailByLevel = new Map();
+  const expanded = [];
+
+  function addMaterial(name, quantities) {
+    if (!name) return;
+    const key = normalize(name);
+    if (!aggregate.has(key)) aggregate.set(key, { name, standard: 0, expected: 0, safe: 0 });
+    const row = aggregate.get(key);
+    row.standard += Number(quantities.standard || 0);
+    row.expected += Number(quantities.expected || 0);
+    row.safe += Number(quantities.safe || 0);
+  }
+
+  function recordStep(level, step, successes, materialAttempts, diamondAttempts) {
+    if (!detailByLevel.has(level)) {
+      detailByLevel.set(level, {
+        step,
+        successes: { standard: 0, expected: 0, safe: 0 },
+        materialAttempts: { standard: 0, expected: 0, safe: 0 },
+        diamondAttempts: { standard: 0, expected: 0, safe: 0 },
+      });
+    }
+    const detail = detailByLevel.get(level);
+    for (const key of ["standard", "expected", "safe"]) {
+      detail.successes[key] += successes[key];
+      detail.materialAttempts[key] += materialAttempts[key];
+      detail.diamondAttempts[key] += diamondAttempts[key];
+    }
+  }
+
+  function expandLevel(level, successes, stack = [], countBase = false) {
+    if (level <= start) {
+      if (countBase) addMaterial(equipmentItemName(equipmentName, start), successes);
+      return;
+    }
+    if (stack.includes(level)) throw new Error(`升级材料存在循环引用：${equipmentName}${level}`);
+    const step = stepsByFrom.get(level - 1);
+    const rate = rateValue(step.success_rate);
+    let materialAttempts = {
+      standard: successes.standard,
+      expected: successes.expected / rate,
+      safe: attemptsForConfidence(ceilQty(successes.safe), rate, confidence),
+    };
+    let diamondAttempts = { ...materialAttempts };
+    if (!step.failure_consumes_materials) materialAttempts = { ...successes };
+    if (!step.failure_consumes_diamonds) diamondAttempts = { ...successes };
+    recordStep(level - 1, step, successes, materialAttempts, diamondAttempts);
+    for (const key of ["standard", "expected", "safe"]) {
+      direct[key] += Number(step.diamond_cost || 0) * Number(diamondAttempts[key] || 0);
+    }
+    let hasExplicitPreviousEquipment = false;
+    for (const material of step.materials || []) {
+      const name = material.material_name || "";
+      const qty = Number(material.quantity || 0);
+      const required = {
+        standard: qty * materialAttempts.standard,
+        expected: qty * materialAttempts.expected,
+        safe: qty * materialAttempts.safe,
+      };
+      const materialLevel = sameEquipmentLevel(name, equipmentName);
+      if (materialLevel === level - 1) hasExplicitPreviousEquipment = true;
+      if (materialLevel !== null && start < materialLevel && materialLevel < level) {
+        expanded.push(name);
+        expandLevel(materialLevel, required, [...stack, level], true);
+      } else {
+        addMaterial(name, required);
+      }
+    }
+    if (!hasExplicitPreviousEquipment) expandLevel(level - 1, successes, [...stack, level], false);
+  }
+
+  expandLevel(end, { standard: targetQuantity, expected: targetQuantity, safe: targetQuantity });
+  const materials = Array.from(aggregate.values()).sort((a, b) => normalize(a.name).localeCompare(normalize(b.name), "zh-Hans-CN"))
+    .map((row) => ({
+      ...row,
+      standard: ceilQty(row.standard),
+      expected: ceilQty(row.expected),
+      safe: ceilQty(row.safe),
+    }));
+  const costs = {
+    standard: direct.standard + totalMaterialCost(materials, "standard"),
+    expected: direct.expected + totalMaterialCost(materials, "expected"),
+    safe: direct.safe + totalMaterialCost(materials, "safe"),
+  };
+  return {
+    missing: [],
+    materials,
+    costs,
+    direct,
+    expanded,
+    details: Array.from(detailByLevel.entries()).sort(([a], [b]) => a - b).map(([, detail]) => detail),
+  };
+}
+
+function totalMaterialCost(rows, field) {
+  return rows.reduce((total, row) => {
+    const price = priceOf(row.name);
+    return total + Number(row[field] || 0) * (price ? Number(price.price_diamonds || 0) : 0);
+  }, 0);
+}
+
+function marketComparison(equipmentName, level, buildCost, quantity) {
+  const price = marketPriceForLevel(equipmentName, level);
+  if (!price) return `直接买 ${equipmentItemName(equipmentName, level)}：暂无市场价`;
+  const marketTotal = Number(price.price_diamonds || 0) * Number(quantity || 1);
+  const diff = marketTotal - buildCost;
+  if (diff > 0) return `直接买 ${price.name} ${money(marketTotal)}；自己合成更省 ${money(diff)}`;
+  if (diff < 0) return `直接买 ${price.name} ${money(marketTotal)}；直接买更省 ${money(Math.abs(diff))}`;
+  return `直接买 ${price.name} ${money(marketTotal)}；两者持平`;
+}
+
+function marketPriceForLevel(equipmentName, level) {
+  const base = String(equipmentName || "").trim();
+  const candidates = [`${base}${level}`, `${base}${level}级`, `${base} ${level}`, `${base}Lv${level}`, `${base}LV${level}`];
+  for (const candidate of candidates) {
+    const price = priceOf(candidate);
+    if (price) return { ...price, name: candidate };
+  }
+  return null;
+}
+
+function sameEquipmentLevel(itemName, equipmentName) {
+  const item = normalizeCompact(itemName);
+  const equipment = normalizeCompact(equipmentName);
+  if (!item || !equipment || !item.startsWith(equipment)) return null;
+  const suffix = item.slice(equipment.length);
+  const match = suffix.match(/^(?:lv|level|l)?(\d+)(?:级)?$/i);
+  return match ? Number(match[1]) : null;
+}
+
+function equipmentItemName(equipmentName, level) {
+  return `${String(equipmentName || "").trim()}${Number(level)}`;
+}
+
+function sourcesOf(name) {
+  const row = (state.data.materials || []).find((item) => normalize(item.name) === normalize(name));
+  return String(row?.source_names || "").split(",").filter(Boolean);
+}
+
+function ceilQty(value) {
+  return Math.ceil(Math.max(0, Number(value || 0)) - 1e-12);
+}
+
 function attemptsForConfidence(successes, successRate, confidence) {
   const k = Math.ceil(successes);
   const p = Number(successRate);
@@ -337,6 +494,10 @@ function rateValue(value) {
 
 function normalize(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function normalizeCompact(value) {
+  return normalize(value).replace(/\s+/g, "");
 }
 
 function col(key, label, format = textValue, className = "") {
