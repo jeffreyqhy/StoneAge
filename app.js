@@ -1,0 +1,385 @@
+const state = {
+  data: null,
+  view: "materials",
+  query: "",
+};
+
+const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => Array.from(document.querySelectorAll(selector));
+
+document.addEventListener("DOMContentLoaded", () => {
+  bindUi();
+  loadData();
+});
+
+function bindUi() {
+  $("#searchButton").addEventListener("click", () => {
+    state.query = $("#searchInput").value.trim();
+    renderCurrentView();
+  });
+  $("#searchInput").addEventListener("input", () => {
+    state.query = $("#searchInput").value.trim();
+    renderCurrentView();
+  });
+  $$(".tab").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.view = button.dataset.view;
+      $$(".tab").forEach((item) => item.classList.toggle("active", item === button));
+      $$(".view").forEach((view) => view.classList.toggle("active", view.id === `view-${state.view}`));
+      renderCurrentView();
+    });
+  });
+  ["recipeTargetQty", "recipeConfidence", "upgradeFrom", "upgradeTo", "upgradeConfidence"].forEach((id) => {
+    $(`#${id}`).addEventListener("input", renderCurrentView);
+  });
+}
+
+async function loadData() {
+  try {
+    const response = await fetch("material-data.json", { cache: "no-store" });
+    if (!response.ok) throw new Error(`资料载入失败：${response.status}`);
+    state.data = await response.json();
+    renderChrome();
+    renderCurrentView();
+  } catch (error) {
+    $("#siteMeta").textContent = `${error.message}。请确认 material-data.json 已和网页文件放在同一目录。`;
+  }
+}
+
+function renderChrome() {
+  const data = state.data;
+  const counts = data.counts || {};
+  $("#siteMeta").textContent = `更新：${formatDate(data.exported_at)} | ${fmtQty(data.diamond_per_rmb)} 钻 = 1 RMB`;
+  const stats = [
+    ["材料", counts.materials || 0],
+    ["出处", counts.source_items || 0],
+    ["配方", counts.recipes || 0],
+    ["升级", counts.upgrade_steps || 0],
+  ];
+  $("#summaryStrip").replaceChildren(...stats.map(([label, value]) => {
+    const node = document.createElement("div");
+    node.className = "summary-card";
+    node.append(el("span", label), el("strong", String(value)));
+    return node;
+  }));
+}
+
+function renderCurrentView() {
+  if (!state.data) return;
+  if (state.view === "materials") renderMaterials();
+  if (state.view === "sources") renderSources();
+  if (state.view === "recipes") renderRecipes();
+  if (state.view === "upgrades") renderUpgrades();
+}
+
+function renderMaterials() {
+  const rows = filterRows(state.data.materials || [], ["name", "category", "source_names", "notes", "price_source"]);
+  $("#materialsCount").textContent = `${rows.length} 条`;
+  renderTable("#materialsTable", [
+    col("name", "材料"),
+    col("category", "分类"),
+    col("price_diamonds", "钻石", fmtQty),
+    col("price_rmb", "RMB", fmtRmb),
+    col("source_names", "出处", sourceText, "wrap"),
+    col("price_updated_at", "价格更新", formatDate),
+    col("notes", "备注", textValue, "wrap"),
+  ], rows);
+}
+
+function renderSources() {
+  const sourceItems = filterRows(state.data.source_items || [], ["item_name", "source_name", "raw_text", "notes"]);
+  const groups = new Map();
+  for (const row of sourceItems) {
+    const name = row.source_name || "未命名出处";
+    if (!groups.has(name)) groups.set(name, []);
+    groups.get(name).push(row);
+  }
+  $("#sourcesCount").textContent = `${groups.size} 个出处，${sourceItems.length} 条记录`;
+  const nodes = Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b, "zh-Hans-CN")).map(([name, rows]) => {
+    const card = document.createElement("article");
+    card.className = "source-card";
+    card.append(el("h3", name));
+    const chips = document.createElement("div");
+    chips.className = "chip-row";
+    rows.slice(0, 24).forEach((row) => {
+      const qty = row.parsed_quantity ? ` x${fmtQty(row.parsed_quantity)}` : "";
+      const chipNode = document.createElement("span");
+      chipNode.className = "chip";
+      chipNode.textContent = `${row.item_name}${qty}`;
+      chips.append(chipNode);
+    });
+    if (rows.length > 24) chips.append(el("span", `还有 ${rows.length - 24} 条`, "chip"));
+    card.append(chips);
+    return card;
+  });
+  $("#sourceGroups").replaceChildren(...(nodes.length ? nodes : [empty("没有匹配的出处。")]));
+}
+
+function renderRecipes() {
+  const targetQuantity = Math.max(1, Number($("#recipeTargetQty").value || 1));
+  const confidence = Number($("#recipeConfidence").value || 0.95);
+  const recipes = filterRows(state.data.recipes || [], ["product_name", "category", "recipe_type", "notes"]);
+  const cards = recipes.map((recipe) => renderRecipeCard(recipe, targetQuantity, confidence));
+  $("#recipeCards").replaceChildren(...(cards.length ? cards : [empty("没有匹配的配方。")]));
+}
+
+function renderRecipeCard(recipe, targetQuantity, confidence) {
+  const outputQuantity = Math.max(0.000001, Number(recipe.output_quantity || 1));
+  const requiredSuccesses = Math.ceil(targetQuantity / outputQuantity);
+  const rate = rateValue(recipe.success_rate);
+  const standardAttempts = requiredSuccesses;
+  const expectedAttempts = requiredSuccesses / rate;
+  const safeAttempts = attemptsForConfidence(requiredSuccesses, rate, confidence);
+  const materialRows = (recipe.materials || []).map((material) => {
+    const base = Number(material.quantity || 0);
+    const expectedQty = base * (recipe.failure_consumes_materials ? expectedAttempts : standardAttempts);
+    const safeQty = base * (recipe.failure_consumes_materials ? safeAttempts : standardAttempts);
+    return { name: material.material_name, standard: base * standardAttempts, expected: expectedQty, safe: safeQty, price: priceOf(material.material_name) };
+  });
+  const directExpected = Number(recipe.diamond_cost || 0) * (recipe.failure_consumes_diamonds ? expectedAttempts : standardAttempts);
+  const directSafe = Number(recipe.diamond_cost || 0) * (recipe.failure_consumes_diamonds ? safeAttempts : standardAttempts);
+  const standardTotal = totalCost(materialRows, "standard") + Number(recipe.diamond_cost || 0) * standardAttempts;
+  const expectedTotal = totalCost(materialRows, "expected") + directExpected;
+  const safeTotal = totalCost(materialRows, "safe") + directSafe;
+  return infoCard(
+    recipe.product_name,
+    `${recipe.category || "未分类"} · ${recipe.recipe_type || "配方"} · 成功率 ${(rate * 100).toFixed(2)}%`,
+    [
+      ["标准成本", money(standardTotal)],
+      ["期望成本", money(expectedTotal)],
+      [`${Math.round(confidence * 100)}% 稳妥`, money(safeTotal)],
+    ],
+    materialRows.map((row) => `${row.name} x${fmtQty(row.safe)}${row.price ? ` · 单价 ${fmtQty(row.price.price_diamonds)}钻` : " · 暂无价格"}`),
+  );
+}
+
+function renderUpgrades() {
+  const fromLevel = Number($("#upgradeFrom").value || 0);
+  const toLevel = Number($("#upgradeTo").value || 1);
+  const confidence = Number($("#upgradeConfidence").value || 0.95);
+  const steps = filterRows(state.data.upgrades || [], ["equipment_name", "notes"]);
+  const names = unique(steps.map((step) => step.equipment_name));
+  const cards = names.map((name) => renderUpgradeCard(name, fromLevel, toLevel, confidence)).filter(Boolean);
+  $("#upgradeCards").replaceChildren(...(cards.length ? cards : [empty("没有匹配的升级资料。")]));
+}
+
+function renderUpgradeCard(equipmentName, fromLevel, toLevel, confidence) {
+  const steps = (state.data.upgrades || []).filter((step) => {
+    return step.equipment_name === equipmentName && Number(step.from_level) >= fromLevel && Number(step.to_level) <= toLevel;
+  }).sort((a, b) => Number(a.from_level) - Number(b.from_level));
+  if (!steps.length) return null;
+  const expectedMaterials = new Map();
+  const safeMaterials = new Map();
+  let standardDirect = 0;
+  let expectedDirect = 0;
+  let safeDirect = 0;
+  for (const step of steps) {
+    const rate = rateValue(step.success_rate);
+    const expectedAttempts = 1 / rate;
+    const safeAttempts = attemptsForConfidence(1, rate, confidence);
+    standardDirect += Number(step.diamond_cost || 0);
+    expectedDirect += Number(step.diamond_cost || 0) * (step.failure_consumes_diamonds ? expectedAttempts : 1);
+    safeDirect += Number(step.diamond_cost || 0) * (step.failure_consumes_diamonds ? safeAttempts : 1);
+    for (const material of step.materials || []) {
+      const name = material.material_name;
+      const qty = Number(material.quantity || 0);
+      addMap(expectedMaterials, name, qty * (step.failure_consumes_materials ? expectedAttempts : 1));
+      addMap(safeMaterials, name, qty * (step.failure_consumes_materials ? safeAttempts : 1));
+    }
+  }
+  const expectedTotal = costMap(expectedMaterials) + expectedDirect;
+  const safeTotal = costMap(safeMaterials) + safeDirect;
+  const materialText = Array.from(safeMaterials.entries()).map(([name, qty]) => {
+    const price = priceOf(name);
+    return `${name} x${fmtQty(qty)}${price ? ` · 单价 ${fmtQty(price.price_diamonds)}钻` : " · 暂无价格"}`;
+  });
+  return infoCard(
+    equipmentName,
+    `${fromLevel} -> ${toLevel}，匹配 ${steps.length} 个升级步骤`,
+    [
+      ["直接钻石", money(standardDirect)],
+      ["期望总成本", money(expectedTotal)],
+      [`${Math.round(confidence * 100)}% 稳妥`, money(safeTotal)],
+    ],
+    materialText,
+  );
+}
+
+function renderTable(selector, columns, rows) {
+  const table = $(selector);
+  table.replaceChildren();
+  const thead = document.createElement("thead");
+  const head = document.createElement("tr");
+  columns.forEach((column) => head.append(el("th", column.label)));
+  thead.append(head);
+  const tbody = document.createElement("tbody");
+  if (!rows.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = Math.max(1, columns.length);
+    td.className = "wrap";
+    td.textContent = "没有匹配的数据。";
+    tr.append(td);
+    tbody.append(tr);
+    table.append(thead, tbody);
+    return;
+  }
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    columns.forEach((column) => {
+      const td = document.createElement("td");
+      if (column.className) td.className = column.className;
+      td.textContent = column.format(row[column.key], row);
+      tr.append(td);
+    });
+    tbody.append(tr);
+  });
+  table.append(thead, tbody);
+}
+
+function infoCard(title, subtitle, metrics, materials) {
+  const card = document.createElement("article");
+  card.className = "info-card";
+  card.append(el("h3", title), el("p", subtitle, "muted"));
+  const metricGrid = document.createElement("div");
+  metricGrid.className = "metric-grid";
+  metrics.forEach(([label, value]) => {
+    const metric = document.createElement("div");
+    metric.className = "metric";
+    metric.append(el("span", label), el("strong", value));
+    metricGrid.append(metric);
+  });
+  card.append(metricGrid);
+  const list = document.createElement("ul");
+  list.className = "materials-list";
+  materials.slice(0, 16).forEach((item) => {
+    const li = document.createElement("li");
+    li.append(el("span", item));
+    list.append(li);
+  });
+  if (materials.length > 16) list.append(el("li", `还有 ${materials.length - 16} 项材料`));
+  card.append(list);
+  return card;
+}
+
+function filterRows(rows, keys) {
+  const query = normalize(state.query);
+  if (!query) return rows;
+  return rows.filter((row) => keys.some((key) => normalize(row[key]).includes(query)));
+}
+
+function priceOf(name) {
+  const normalized = normalize(name);
+  return (state.data.materials || []).find((row) => normalize(row.name) === normalized && row.price_diamonds !== null && row.price_diamonds !== undefined);
+}
+
+function totalCost(rows, field) {
+  return rows.reduce((total, row) => {
+    const price = row.price ? Number(row.price.price_diamonds || 0) : 0;
+    return total + Number(row[field] || 0) * price;
+  }, 0);
+}
+
+function costMap(map) {
+  let total = 0;
+  for (const [name, qty] of map.entries()) {
+    const price = priceOf(name);
+    total += qty * (price ? Number(price.price_diamonds || 0) : 0);
+  }
+  return total;
+}
+
+function attemptsForConfidence(successes, successRate, confidence) {
+  const k = Math.ceil(successes);
+  const p = Number(successRate);
+  let conf = Number(confidence);
+  if (k <= 0) return 0;
+  if (p <= 0) return k;
+  if (p >= 1) return k;
+  if (conf >= 1) conf = 0.999999;
+  const start = Math.max(k, Math.ceil(k / p));
+  const cap = Math.min(100000, Math.max(start + 1000, Math.floor(start * 20 + 100)));
+  for (let n = start; n <= cap; n += 1) {
+    if (binomialTailAtLeast(n, k, p) >= conf) return n;
+  }
+  return cap;
+}
+
+function binomialTailAtLeast(n, k, p) {
+  if (k <= 0) return 1;
+  if (k > n) return 0;
+  if (p <= 0) return 0;
+  if (p >= 1) return 1;
+  const q = 1 - p;
+  let prob = q ** n;
+  let cdf = prob;
+  for (let i = 0; i < k - 1; i += 1) {
+    prob = q === 0 ? 0 : prob * (n - i) / (i + 1) * p / q;
+    cdf += prob;
+    if (cdf >= 1) return 0;
+  }
+  return Math.max(0, Math.min(1, 1 - cdf));
+}
+
+function addMap(map, key, value) {
+  map.set(key, (map.get(key) || 0) + value);
+}
+
+function unique(values) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function rateValue(value) {
+  const rate = Number(value || 1);
+  if (rate > 1) return rate / 100;
+  return Math.max(0.000001, rate);
+}
+
+function normalize(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function col(key, label, format = textValue, className = "") {
+  return { key, label, format, className };
+}
+
+function el(tag, text = "", className = "") {
+  const node = document.createElement(tag);
+  node.textContent = text;
+  if (className) node.className = className;
+  return node;
+}
+
+function empty(text) {
+  return el("div", text, "empty");
+}
+
+function textValue(value) {
+  return value === null || value === undefined ? "" : String(value);
+}
+
+function fmtQty(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const number = Number(value);
+  if (!Number.isFinite(number)) return String(value);
+  return Number.isInteger(number) ? String(number) : number.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function fmtRmb(value) {
+  if (value === null || value === undefined || value === "") return "";
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toFixed(2) : "";
+}
+
+function money(diamonds) {
+  return `${fmtQty(diamonds)}钻 / ${fmtRmb(Number(diamonds || 0) / Number(state.data.diamond_per_rmb || 500))} RMB`;
+}
+
+function sourceText(value) {
+  return String(value || "").split(",").filter(Boolean).join(" / ");
+}
+
+function formatDate(value) {
+  if (!value) return "";
+  return String(value).replace("T", " ").slice(0, 16);
+}
