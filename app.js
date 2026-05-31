@@ -477,13 +477,11 @@ function renderTradeTool() {
   const requiredTax = tradeTaxAmount(requiredGross, rate);
   const actualNet = netAfterTradeTax(gross, rate);
   const actualTax = tradeTaxAmount(gross, rate);
-  $("#tradeRatioLabel").textContent = `${fmtQty(state.data.diamond_per_rmb)} 钻 = 1 RMB`;
   $("#tradeRequiredGross").textContent = `${fmtQty(requiredGross)} 钻`;
   $("#tradeRequiredTax").textContent = `${fmtQty(requiredTax)} 钻`;
   $("#tradeGuaranteedNet").textContent = `${fmtQty(guaranteedNet)} 钻`;
   $("#tradeActualNet").textContent = `${fmtQty(actualNet)} 钻`;
   $("#tradeActualTax").textContent = `${fmtQty(actualTax)} 钻`;
-  $("#tradeActualRmb").textContent = `${fmtRmb(actualNet / Number(state.data.diamond_per_rmb || 500))} RMB`;
 }
 
 function renderTable(selector, columns, rows) {
