@@ -1,0 +1,46 @@
+name: Build Windows package
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - "codex/**"
+    tags:
+      - "v*"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build app
+        shell: pwsh
+        run: .\packaging\windows\build.ps1
+
+      - name: Create zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist\StoneAge Script Studio\*" -DestinationPath "dist\StoneAge-Script-Studio-Windows.zip" -Force
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StoneAge-Script-Studio-Windows
+          path: dist/StoneAge-Script-Studio-Windows.zip
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create $env:GITHUB_REF_NAME "dist\StoneAge-Script-Studio-Windows.zip" --title $env:GITHUB_REF_NAME --notes "Windows PC package. Download the zip, unzip it, then run install_and_run.bat."

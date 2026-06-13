@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>石器时代-精灵召唤</title>
+    <meta name="description" content="石器时代-精灵召唤官方网站，提供公告、下载、攻略、活动、客服与资料库工具入口。" />
+    <link rel="stylesheet" href="styles.css?v=20260601-nte" />
+    <script src="app.js?v=20260601-nte" defer></script>
+  </head>
+  <body>
+    <header class="site-hero" id="home">
+      <nav class="site-nav" aria-label="主导航">
+        <a class="brand-mark" href="#home">石器时代-精灵召唤</a>
+        <div class="nav-links">
+          <a href="#home">首页</a>
+          <a href="#boards">公告攻略</a>
+          <a href="#features">游戏特色</a>
+          <a href="#download">下载社群</a>
+          <a href="#tools" data-open-tools>资料工具</a>
+        </div>
+      </nav>
+
+      <div class="hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow" id="heroBadge">官方网站</p>
+          <h1 id="heroTitle">石器时代-精灵召唤</h1>
+          <p id="heroBody">回到尼斯大陆，召唤精灵、组建家族、挑战副本，把官方公告、攻略与资料入口集中在这里。</p>
+          <div class="credits">
+            <span id="heroAuthor">作者：烈焰部落 - 花儿</span>
+          </div>
+          <div class="hero-actions">
+            <a class="primary-action" href="https://www.djinhe.cn/" target="_blank" rel="noopener">进入论坛</a>
+            <a class="secondary-action" id="heroDownloadLink" href="https://www.djinhe.cn/forum.php?mod=forumdisplay&fid=2" target="_blank" rel="noopener">立即下载</a>
+          </div>
+        </div>
+        <div class="summary-strip" id="summaryStrip"></div>
+      </div>
+    </header>
+
+    <main>
+      <section class="official-section intro-band" id="boards">
+        <div class="section-title">
+          <p>News</p>
+          <h2>公告与攻略</h2>
+          <span id="siteMeta">正在载入资料...</span>
+        </div>
+        <div class="board-grid" id="forumBoards"></div>
+      </section>
+
+      <section class="official-section" id="features">
+        <div class="section-title">
+          <p>Game Feature</p>
+          <h2>游戏特色</h2>
+          <span>把官方论坛里的公告、活动、攻略和资料入口整理成玩家更容易浏览的官网内容。</span>
+        </div>
+        <div class="feature-grid" id="featureGrid"></div>
+      </section>
+
+      <section class="official-section download-band" id="download">
+        <div class="download-copy">
+          <p>Download</p>
+          <h2>下载与社群</h2>
+          <span>现有官方内容来自论坛，后续可替换成 GM 提供的域名、下载链接和客服二维码。</span>
+        </div>
+        <div class="link-grid" id="officialLinks"></div>
+      </section>
+
+      <section class="official-section tools-gateway" id="tools">
+        <div class="section-title">
+          <p>Tools</p>
+          <h2>资料工具入口</h2>
+          <span>资料库、升级计算和交易计算作为工具区收起，需要时再打开，不占官网首页主视觉。</span>
+        </div>
+        <div class="tool-entry-grid">
+          <button class="tool-entry" type="button" data-open-tools data-tool-view="materials">
+            <span>资料库</span>
+            <strong>材料 / 出处 / 配方</strong>
+          </button>
+          <button class="tool-entry" type="button" data-open-tools data-tool-view="upgrades">
+            <span>升级计算</span>
+            <strong>装备升级路线与成本</strong>
+          </button>
+          <button class="tool-entry" type="button" data-open-tools data-tool-view="trade">
+            <span>交易计算</span>
+            <strong>扣税与到账反推</strong>
+          </button>
+        </div>
+      </section>
+
+      <section class="database-shell is-hidden" id="database">
+        <div class="database-head">
+          <p>Database</p>
+          <h2>资料库工具</h2>
+          <span>材料价格、出处掉落、配方成本、装备升级路线和交易扣税。</span>
+          <button id="closeToolsButton" class="ghost-button" type="button">收起工具</button>
+        </div>
+
+        <section class="search-band">
+          <div class="search-row">
+            <input id="searchInput" type="search" placeholder="搜索材料、出处、配方或装备" autocomplete="off" />
+            <button id="searchButton">搜索</button>
+          </div>
+          <div class="tabs" role="tablist">
+            <button class="tab active" data-view="materials">材料</button>
+            <button class="tab" data-view="sources">出处</button>
+            <button class="tab" data-view="recipes">配方</button>
+            <button class="tab" data-view="upgrades">升级</button>
+            <button class="tab" data-view="trade">交易</button>
+          </div>
+        </section>
+
+        <section id="view-materials" class="view active">
+          <div class="section-head">
+            <h2>材料价格与出处</h2>
+            <span id="materialsCount"></span>
+          </div>
+          <div class="table-wrap">
+            <table id="materialsTable"></table>
+          </div>
+        </section>
+
+        <section id="view-sources" class="view">
+          <div class="section-head">
+            <h2>出处掉落</h2>
+            <span id="sourcesCount"></span>
+          </div>
+          <div id="sourceGroups" class="source-grid"></div>
+        </section>
+
+        <section id="view-recipes" class="view">
+          <div class="section-head">
+            <h2>配方计算</h2>
+            <div class="inline-form">
+              <label>目标数量 <input id="recipeTargetQty" type="number" min="1" value="1" /></label>
+              <label>稳妥 <select id="recipeConfidence"><option value="0.90">90%</option><option value="0.95" selected>95%</option><option value="0.99">99%</option></select></label>
+            </div>
+          </div>
+          <div id="recipeCards" class="card-grid"></div>
+        </section>
+
+        <section id="view-upgrades" class="view">
+          <div class="section-head">
+            <h2>升级材料</h2>
+            <div class="inline-form">
+              <label>起始 <input id="upgradeFrom" type="number" min="0" value="0" /></label>
+              <label>目标 <input id="upgradeTo" type="number" min="1" value="20" /></label>
+              <label>稳妥 <select id="upgradeConfidence"><option value="0.90">90%</option><option value="0.95" selected>95%</option><option value="0.99">99%</option></select></label>
+            </div>
+          </div>
+          <div id="upgradeCards" class="card-grid"></div>
+        </section>
+
+        <section id="view-trade" class="view">
+          <div class="section-head">
+            <h2>交易钻石计算</h2>
+            <span>仅计算交易扣税，不展示非官方钻石换算。</span>
+          </div>
+          <div class="tool-grid">
+            <article class="tool-panel">
+              <h3>按到账反推</h3>
+              <div class="tool-form">
+                <label>希望对方到账 <input id="tradeTargetNet" type="number" min="0" value="10000" /></label>
+                <label>交易税率 <input id="tradeTaxRate" type="number" min="0" max="99" step="0.1" value="5" /></label>
+              </div>
+              <div class="result-grid">
+                <div class="result-box"><span>需要交易</span><strong id="tradeRequiredGross">-</strong></div>
+                <div class="result-box"><span>扣税</span><strong id="tradeRequiredTax">-</strong></div>
+                <div class="result-box"><span>预计到账</span><strong id="tradeGuaranteedNet">-</strong></div>
+              </div>
+            </article>
+            <article class="tool-panel">
+              <h3>按实际交易计算</h3>
+              <div class="tool-form">
+                <label>实际交易 <input id="tradeGross" type="number" min="0" value="10000" /></label>
+              </div>
+              <div class="result-grid">
+                <div class="result-box"><span>对方收到</span><strong id="tradeActualNet">-</strong></div>
+                <div class="result-box"><span>扣税</span><strong id="tradeActualTax">-</strong></div>
+              </div>
+            </article>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>石器时代-精灵召唤</span>
+      <a href="https://www.djinhe.cn/" target="_blank" rel="noopener">官方论坛</a>
+    </footer>
+  </body>
+</html>

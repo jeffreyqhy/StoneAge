@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>石器时代材料库</title>
+    <link rel="stylesheet" href="/static/materials/styles.css" />
+    <script src="/static/materials/app.js" defer></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <h1>石器时代材料库</h1>
+          <div class="meta-line" id="statusLine">正在连接资料库...</div>
+        </div>
+        <div class="top-actions">
+          <input id="globalSearch" type="search" placeholder="搜索材料 / 配方 / 出处" autocomplete="off" />
+          <button id="globalSearchButton" class="primary">搜索</button>
+          <button id="refreshButton">刷新</button>
+        </div>
+      </header>
+
+      <div class="workspace">
+        <nav class="sidebar" aria-label="主导航">
+          <button class="nav-item active" data-view="query">查询计算</button>
+          <button class="nav-item" data-view="materials">材料价格</button>
+          <button class="nav-item" data-view="recipes">配方管理</button>
+          <button class="nav-item" data-view="upgrades">升级管理</button>
+          <button class="nav-item" data-view="sources">出处别名</button>
+          <button class="nav-item" data-view="data">导入导出</button>
+        </nav>
+
+        <main class="content">
+          <section id="view-query" class="view active">
+            <div class="section-band">
+              <div class="toolbar query-grid">
+                <label>
+                  <span>搜索</span>
+                  <input id="queryText" list="itemNames" placeholder="材料、出处、成品或装备" />
+                </label>
+                <label>
+                  <span>类型</span>
+                  <select id="queryKind">
+                    <option value="material">查材料</option>
+                    <option value="source">查副本/出处掉落</option>
+                    <option value="recipe">查成品配方</option>
+                    <option value="upgrade">查装备升级</option>
+                  </select>
+                </label>
+                <label>
+                  <span>目标数量</span>
+                  <input id="queryTargetQty" type="number" min="1" value="1" />
+                </label>
+                <label>
+                  <span>起始等级</span>
+                  <input id="queryFromLevel" type="number" min="0" value="12" />
+                </label>
+                <label>
+                  <span>目标等级</span>
+                  <input id="queryToLevel" type="number" min="1" value="20" />
+                </label>
+                <label>
+                  <span>稳妥模式</span>
+                  <select id="queryConfidence">
+                    <option value="0.90">90%</option>
+                    <option value="0.95" selected>95%</option>
+                    <option value="0.99">99%</option>
+                  </select>
+                </label>
+                <button id="runQuery" class="primary">查询 / 计算</button>
+              </div>
+            </div>
+
+            <div class="split two">
+              <div class="panel">
+                <div class="panel-head">
+                  <h2>结果</h2>
+                  <button id="copyQueryText">复制</button>
+                </div>
+                <div class="table-wrap">
+                  <table id="queryTable"></table>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-head">
+                  <h2>明细</h2>
+                </div>
+                <pre id="queryTextResult" class="text-result"></pre>
+              </div>
+            </div>
+
+            <div class="section-band compact">
+              <div class="toolbar trade-grid">
+                <label>
+                  <span>对方到账</span>
+                  <input id="tradeTargetNet" type="number" min="0" value="10000" />
+                </label>
+                <label>
+                  <span>实际交易</span>
+                  <input id="tradeGross" type="number" min="0" value="10000" />
+                </label>
+                <label>
+                  <span>税率</span>
+                  <input id="tradeTaxRate" type="number" min="0" max="99" step="0.001" value="5" />
+                </label>
+                <div class="stat">
+                  <span>需要交易</span>
+                  <strong id="tradeRequired">-</strong>
+                </div>
+                <div class="stat">
+                  <span>实际到账</span>
+                  <strong id="tradeNet">-</strong>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="view-materials" class="view">
+            <div class="split">
+              <div class="panel">
+                <div class="panel-head">
+                  <h2>材料</h2>
+                  <div class="inline-actions">
+                    <input id="materialSearch" type="search" placeholder="搜索材料" />
+                    <button id="loadMaterials">刷新</button>
+                  </div>
+                </div>
+                <div class="table-wrap tall">
+                  <table id="materialsTable"></table>
+                </div>
+              </div>
+
+              <div class="panel form-panel">
+                <div class="panel-head">
+                  <h2>编辑材料</h2>
+                  <button id="newMaterial">新增</button>
+                </div>
+                <div class="form-grid">
+                  <label class="wide">
+                    <span>材料名</span>
+                    <input id="materialName" list="itemNames" />
+                  </label>
+                  <label>
+                    <span>分类</span>
+                    <input id="materialCategory" />
+                  </label>
+                  <label>
+                    <span>钻石单价</span>
+                    <input id="materialPrice" type="number" min="0" step="0.01" />
+                  </label>
+                  <label>
+                    <span>价格来源</span>
+                    <input id="materialPriceSource" value="网页版录入" />
+                  </label>
+                  <label>
+                    <span>启用</span>
+                    <select id="materialPriceActive">
+                      <option value="1">是</option>
+                      <option value="0">否</option>
+                    </select>
+                  </label>
+                  <label class="wide">
+                    <span>备注</span>
+                    <textarea id="materialNotes" rows="3"></textarea>
+                  </label>
+                  <label class="wide">
+                    <span>价格备注</span>
+                    <textarea id="materialPriceNotes" rows="2"></textarea>
+                  </label>
+                </div>
+                <div class="form-actions">
+                  <button id="saveMaterial" class="primary">保存材料</button>
+                  <button id="deleteMaterialPrice" class="danger">删除价格</button>
+                </div>
+
+                <div class="subsection">
+                  <div class="panel-head small">
+                    <h3>出处关系</h3>
+                  </div>
+                  <div class="form-grid source-form">
+                    <input id="sourceItemName" list="itemNames" placeholder="材料名" />
+                    <input id="sourceName" list="sourceNames" placeholder="出处名称" />
+                    <input id="sourceQty" type="number" min="0" step="0.01" placeholder="数量" />
+                    <button id="addSourceItem">新增出处</button>
+                  </div>
+                  <div class="table-wrap compact-table">
+                    <table id="materialSourcesTable"></table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="view-recipes" class="view">
+            <div class="split">
+              <div class="panel">
+                <div class="panel-head">
+                  <h2>配方</h2>
+                  <div class="inline-actions">
+                    <input id="recipeSearch" type="search" placeholder="搜索成品" />
+                    <button id="loadRecipes">刷新</button>
+                  </div>
+                </div>
+                <div class="table-wrap tall">
+                  <table id="recipesTable"></table>
+                </div>
+              </div>
+
+              <div class="panel form-panel">
+                <div class="panel-head">
+                  <h2>编辑配方</h2>
+                  <button id="newRecipe">新增</button>
+                </div>
+                <div class="form-grid">
+                  <input id="recipeId" type="hidden" />
+                  <label class="wide">
+                    <span>成品名称</span>
+                    <input id="recipeProduct" list="itemNames" />
+                  </label>
+                  <label>
+                    <span>分类</span>
+                    <input id="recipeCategory" value="其他" />
+                  </label>
+                  <label>
+                    <span>配方类型</span>
+                    <input id="recipeType" value="打造" />
+                  </label>
+                  <label>
+                    <span>成功率 %</span>
+                    <input id="recipeSuccess" type="number" min="0.01" max="100" step="0.01" value="100" />
+                  </label>
+                  <label>
+                    <span>产出数量</span>
+                    <input id="recipeOutputQty" type="number" min="0.000001" step="0.01" value="1" />
+                  </label>
+                  <label>
+                    <span>每次钻石</span>
+                    <input id="recipeDiamond" type="number" min="0" step="0.01" value="0" />
+                  </label>
+                  <label class="wide">
+                    <span>备注</span>
+                    <textarea id="recipeNotes" rows="2"></textarea>
+                  </label>
+                </div>
+                <div class="checks">
+                  <label><input id="recipeFailMaterials" type="checkbox" checked />失败消耗材料</label>
+                  <label><input id="recipeFailDiamonds" type="checkbox" checked />失败消耗钻石</label>
+                  <label><input id="recipeFailCoin" type="checkbox" checked />失败消耗金币</label>
+                </div>
+
+                <div class="panel-head small">
+                  <h3>配方材料</h3>
+                  <button id="addRecipeMaterial">添加材料</button>
+                </div>
+                <div class="table-wrap edit-table">
+                  <table id="recipeMaterialsTable"></table>
+                </div>
+                <div class="form-actions">
+                  <button id="saveRecipe" class="primary">保存配方</button>
+                  <button id="calculateRecipe">计算</button>
+                  <button id="deleteRecipe" class="danger">删除</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="view-upgrades" class="view">
+            <div class="split">
+              <div class="panel">
+                <div class="panel-head">
+                  <h2>升级步骤</h2>
+                  <div class="inline-actions">
+                    <input id="upgradeSearch" type="search" placeholder="搜索装备" />
+                    <button id="loadUpgrades">刷新</button>
+                  </div>
+                </div>
+                <div class="table-wrap tall">
+                  <table id="upgradesTable"></table>
+                </div>
+              </div>
+
+              <div class="panel form-panel">
+                <div class="panel-head">
+                  <h2>编辑升级</h2>
+                  <button id="newUpgrade">新增</button>
+                </div>
+                <div class="form-grid">
+                  <input id="upgradeId" type="hidden" />
+                  <label class="wide">
+                    <span>装备名称</span>
+                    <input id="upgradeEquipment" list="itemNames" />
+                  </label>
+                  <label>
+                    <span>当前等级</span>
+                    <input id="upgradeFrom" type="number" min="0" value="0" />
+                  </label>
+                  <label>
+                    <span>目标等级</span>
+                    <input id="upgradeTo" type="number" min="1" value="1" />
+                  </label>
+                  <label>
+                    <span>成功率 %</span>
+                    <input id="upgradeSuccess" type="number" min="0.01" max="100" step="0.01" value="100" />
+                  </label>
+                  <label>
+                    <span>每次钻石</span>
+                    <input id="upgradeDiamond" type="number" min="0" step="0.01" value="0" />
+                  </label>
+                  <label>
+                    <span>每次金币</span>
+                    <input id="upgradeCoin" type="number" min="0" step="0.01" value="0" />
+                  </label>
+                  <label class="wide">
+                    <span>备注</span>
+                    <textarea id="upgradeNotes" rows="2"></textarea>
+                  </label>
+                </div>
+                <div class="checks">
+                  <label><input id="upgradeFailMaterials" type="checkbox" checked />失败消耗材料</label>
+                  <label><input id="upgradeFailDiamonds" type="checkbox" checked />失败消耗钻石</label>
+                  <label><input id="upgradeDowngrade" type="checkbox" />失败会降级</label>
+                </div>
+
+                <div class="panel-head small">
+                  <h3>升级材料</h3>
+                  <button id="addUpgradeMaterial">添加材料</button>
+                </div>
+                <div class="table-wrap edit-table">
+                  <table id="upgradeMaterialsTable"></table>
+                </div>
+                <div class="form-actions">
+                  <button id="saveUpgrade" class="primary">保存升级</button>
+                  <button id="calculateUpgrade">计算区间</button>
+                  <button id="deleteUpgrade" class="danger">删除</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="view-sources" class="view">
+            <div class="split two">
+              <div class="panel">
+                <div class="panel-head">
+                  <h2>材料出处库</h2>
+                  <div class="inline-actions">
+                    <input id="sourceSearch" type="search" placeholder="搜索出处" />
+                    <button id="loadSources">刷新</button>
+                  </div>
+                </div>
+                <div class="table-wrap tall">
+                  <table id="sourcesTable"></table>
+                </div>
+              </div>
+              <div class="panel">
+                <div class="panel-head">
+                  <h2>别名</h2>
+                  <div class="inline-actions">
+                    <input id="aliasSearch" type="search" placeholder="搜索别名" />
+                    <button id="loadAliases">刷新</button>
+                  </div>
+                </div>
+                <div class="form-grid alias-form">
+                  <input id="aliasItem" list="itemNames" placeholder="正式名" />
+                  <input id="aliasValue" placeholder="别名" />
+                  <button id="addAlias">新增别名</button>
+                </div>
+                <div class="table-wrap tall">
+                  <table id="aliasesTable"></table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section id="view-data" class="view">
+            <div class="grid-panels">
+              <div class="panel">
+                <div class="panel-head">
+                  <h2>设置</h2>
+                </div>
+                <div class="form-grid">
+                  <label>
+                    <span>每 1 RMB 对应钻石数</span>
+                    <input id="diamondRatio" type="number" min="0.0001" step="0.0001" value="500" />
+                  </label>
+                  <button id="saveSettings" class="primary">保存设置</button>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <h2>导出</h2>
+                </div>
+                <div class="button-grid">
+                  <button data-download="/api/export/json">数据库 JSON</button>
+                  <button data-download="/api/export/prices-csv">价格 CSV</button>
+                  <button data-download="/api/export/sources-csv">出处 CSV</button>
+                  <button data-download="/api/export/recipes-csv">配方 CSV</button>
+                  <button data-download="/api/export/upgrades-csv">升级 CSV</button>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <h2>导入</h2>
+                </div>
+                <div class="upload-list">
+                  <label>
+                    <span>数据库 JSON</span>
+                    <input id="jsonImport" type="file" accept=".json,application/json" />
+                  </label>
+                  <label>
+                    <span>价格 CSV</span>
+                    <input id="priceCsvImport" type="file" accept=".csv,text/csv" />
+                  </label>
+                  <label>
+                    <span>Excel 出处表</span>
+                    <input id="excelImport" type="file" accept=".xlsx" />
+                  </label>
+                  <label>
+                    <span>Excel 模式</span>
+                    <select id="excelMode">
+                      <option value="merge">合并导入</option>
+                      <option value="replace">覆盖已导入 Excel 数据</option>
+                      <option value="append">追加导入</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div class="panel">
+                <div class="panel-head">
+                  <h2>资料库状态</h2>
+                </div>
+                <div id="databaseStats" class="stats-grid"></div>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <datalist id="itemNames"></datalist>
+    <datalist id="sourceNames"></datalist>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
