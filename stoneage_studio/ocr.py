@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .image_io import cv2_imread
 from .process import subprocess_no_window_kwargs
 
 
@@ -341,7 +342,7 @@ class OCREngine:
             import cv2  # type: ignore
         except Exception:
             return None
-        image = cv2.imread(str(path), cv2.IMREAD_COLOR)
+        image = cv2_imread(path, cv2.IMREAD_COLOR)
         if image is None:
             return None
         scale = 4 if mode == "digit" else 3

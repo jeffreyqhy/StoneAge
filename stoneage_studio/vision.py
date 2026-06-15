@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .image_io import cv2_imread
+
 
 @dataclass
 class MatchResult:
@@ -31,7 +33,7 @@ def match_template_qimage(
     if frame is None or frame.isNull():
         return MatchResult(False, 0.0, error="当前没有游戏画面")
 
-    template = cv2.imread(str(template_path), cv2.IMREAD_COLOR)
+    template = cv2_imread(template_path, cv2.IMREAD_COLOR)
     if template is None:
         return MatchResult(False, 0.0, error=f"模板读取失败：{template_path}")
 
