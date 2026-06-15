@@ -88,6 +88,7 @@ from .coords.game_coord_reader import GameCoordReader
 from .flow import STEP_LABELS, STEP_TYPES, clone_step, create_flow, create_step, load_flow, refresh_step_identity, save_flow, short_id
 from .maps.walkability_grid import WalkabilityGrid
 from .navigation.approach_point_selector import ApproachPointSelector
+from .process import subprocess_no_window_kwargs
 from .navigation.local_movement_controller import LocalMovementController
 from .navigation.path_planner import PathPlanner
 from .navigation.stuck_detector import StuckDetector
@@ -259,6 +260,7 @@ def tesseract_single_digit_candidates(path: Path) -> list[dict[str, Any]]:
                         capture_output=True,
                         text=True,
                         timeout=5,
+                        **subprocess_no_window_kwargs(),
                     )
                 except Exception:
                     continue
@@ -585,6 +587,7 @@ REGION_CHOICES: list[tuple[str, str]] = [
 
 VISIBLE_STEP_TYPES = [
     "click",
+    "swipe",
     "wait",
     "image_check",
     "find_target",
@@ -601,6 +604,7 @@ VISIBLE_STEP_TYPES = [
 
 OLD_DEFAULT_GAME_COORD_REGION = [1760, 118, 150, 75]
 DEFAULT_GAME_COORD_REGION = [1720, 80, 200, 120]
+MAX_CLICK_COUNT = 999999
 
 STEP_LIST_KIND_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 STEP_LIST_DEPTH_ROLE = int(Qt.ItemDataRole.UserRole) + 2
@@ -695,6 +699,7 @@ class DeepSeaAutoRecorderWorker(QThread):
             capture_output=True,
             text=True,
             timeout=timeout,
+            **subprocess_no_window_kwargs(),
         )
         return result.stdout or result.stderr or ""
 
@@ -747,6 +752,7 @@ class DeepSeaAutoRecorderWorker(QThread):
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,
+            **subprocess_no_window_kwargs(),
         )
         if self._proc.stdout is None:
             raise RuntimeError("getevent 没有输出。")
@@ -1455,6 +1461,13 @@ class DeepSeaActionCaptureSetupDialog(QDialog):
         self.step_type_combo.addItem("滑动列表", "swipe")
         form.addRow("类型", self.step_type_combo)
 
+        self.hold_seconds_spin = QDoubleSpinBox()
+        self.hold_seconds_spin.setRange(0, 60)
+        self.hold_seconds_spin.setDecimals(2)
+        self.hold_seconds_spin.setSingleStep(0.1)
+        self.hold_seconds_spin.setSpecialValueText("普通点击")
+        form.addRow("点击按住秒数", self.hold_seconds_spin)
+
         layout.addLayout(form)
 
         self.center_click = QCheckBox("模板中心就是点击点")
@@ -1477,7 +1490,9 @@ class DeepSeaActionCaptureSetupDialog(QDialog):
         self.action_combo.currentTextChanged.connect(self.refresh_step_suggestions)
         self.actor_combo.currentTextChanged.connect(self.refresh_step_suggestions)
         self.step_combo.currentTextChanged.connect(self.update_step_type_from_label)
+        self.step_type_combo.currentIndexChanged.connect(lambda _index: self.update_hold_control_state())
         self.refresh_step_suggestions()
+        self.update_hold_control_state()
 
     def refresh_step_suggestions(self) -> None:
         actor_text = self.actor_combo.currentText()
@@ -1512,6 +1527,10 @@ class DeepSeaActionCaptureSetupDialog(QDialog):
         index = self.step_type_combo.findData(desired)
         if index >= 0:
             self.step_type_combo.setCurrentIndex(index)
+        self.update_hold_control_state()
+
+    def update_hold_control_state(self) -> None:
+        self.hold_seconds_spin.setEnabled(str(self.step_type_combo.currentData() or "") != "swipe")
 
     def accept(self) -> None:
         try:
@@ -1531,6 +1550,7 @@ class DeepSeaActionCaptureSetupDialog(QDialog):
             "action_text": self.action_combo.currentText().strip(),
             "step_label": self.step_combo.currentText().strip(),
             "step_type": self.step_type_combo.currentData(),
+            "hold_seconds": float(self.hold_seconds_spin.value()),
             "manual_click_offset": not self.center_click.isChecked(),
             "tap_after_capture": self.tap_after_capture.isChecked(),
         }
@@ -1555,7 +1575,11 @@ class DeepSeaSwipeCaptureDialog(QDialog):
         self.hint_label = QLabel("第一下点滑动起点，第二下点滑动终点。比如技能列表翻下去：从列表下方点到列表上方。")
         top.addWidget(self.hint_label)
         top.addStretch(1)
+        self.swipe_up_button = QPushButton("上滑")
+        self.swipe_down_button = QPushButton("下滑")
         self.reset_button = QPushButton("重选")
+        top.addWidget(self.swipe_up_button)
+        top.addWidget(self.swipe_down_button)
         top.addWidget(self.reset_button)
         layout.addLayout(top)
 
@@ -1582,6 +1606,8 @@ class DeepSeaSwipeCaptureDialog(QDialog):
         layout.addWidget(buttons)
 
         self.reset_button.clicked.connect(self.reset_points)
+        self.swipe_up_button.clicked.connect(lambda: self.set_directional_swipe("up"))
+        self.swipe_down_button.clicked.connect(lambda: self.set_directional_swipe("down"))
 
     def reset_points(self) -> None:
         self.selected_start = None
@@ -1590,6 +1616,30 @@ class DeepSeaSwipeCaptureDialog(QDialog):
         self.ok_button.setEnabled(False)
         self.coord_label.setText("滑动：未设置")
         self.hint_label.setText("第一下点滑动起点，第二下点滑动终点。")
+
+    def set_directional_swipe(self, direction: str) -> None:
+        if self.view.frame is None:
+            return
+        width = max(1, int(self.view.frame.width()))
+        height = max(1, int(self.view.frame.height()))
+        x = max(0, min(width - 1, int(round(width * 0.5))))
+        top_y = max(0, min(height - 1, int(round(height * 0.30))))
+        bottom_y = max(0, min(height - 1, int(round(height * 0.76))))
+        if direction == "down":
+            self.selected_start = QPoint(x, top_y)
+            self.selected_end = QPoint(x, bottom_y)
+            label = "下滑"
+        else:
+            self.selected_start = QPoint(x, bottom_y)
+            self.selected_end = QPoint(x, top_y)
+            label = "上滑"
+        self.view.set_pinned_point(self.selected_end)
+        self.ok_button.setEnabled(True)
+        self.coord_label.setText(
+            f"{label}：{self.selected_start.x()}, {self.selected_start.y()} -> "
+            f"{self.selected_end.x()}, {self.selected_end.y()}"
+        )
+        self.hint_label.setText(f"已套用{label}，点 OK 保存；也可以点重选后手动指定。")
 
     def on_point_clicked(self, point: QPoint) -> None:
         if self.view.frame is None:
@@ -1904,6 +1954,7 @@ class DeepSeaOperationReviewDialog(QDialog):
             step_label=step_label,
             step_type="recorded_tap",
             click_point=operation.get("start"),
+            hold_seconds=max(0.0, float(operation.get("duration_seconds") or 0.0)),
             wait_after=0.4,
             note=source_note,
             replace_same_label=False,
@@ -5174,6 +5225,8 @@ class MainWindow(QMainWindow):
             [
                 ("当前画面操作", self.open_large_region_dialog),
                 ("插入点击", lambda: self.add_blank_step("click", insert_after=True)),
+                ("插入上滑", lambda: self.add_swipe_step("up", insert_after=True)),
+                ("插入下滑", lambda: self.add_swipe_step("down", insert_after=True)),
                 ("插入等待", lambda: self.add_blank_step("wait", insert_after=True)),
                 ("插入验证码", self.add_verify_code_step_from_capture),
                 ("插入预设", self.add_battle_speed_preset_step),
@@ -7112,6 +7165,7 @@ class MainWindow(QMainWindow):
         actor_text = config["actor_text"]
         action_text = config["action_text"]
         step_label = config["step_label"]
+        hold_seconds = max(0.0, float(config.get("hold_seconds") or 0.0))
 
         try:
             actor_ref = normalize_actor(actor_text)
@@ -7293,6 +7347,7 @@ class MainWindow(QMainWindow):
             "action_name": action_name,
             "step_label": step_label,
             "click_offset": click_offset,
+            "hold_seconds": hold_seconds,
         }
         self.storage.add_asset(
             asset_id=asset_id,
@@ -7316,6 +7371,7 @@ class MainWindow(QMainWindow):
             asset_id=asset_id,
             bbox=bbox,
             click_offset=click_offset,
+            hold_seconds=hold_seconds,
             threshold=0.85,
             wait_after=0.4,
         )
@@ -7328,7 +7384,14 @@ class MainWindow(QMainWindow):
             tap_x = int(bounded.x() + click_offset[0])
             tap_y = int(bounded.y() + click_offset[1])
             try:
-                tapped = self.tap_repeated(tap_x, tap_y, 1, 0.08, label="深海采集后点击")
+                tapped = self.tap_repeated(
+                    tap_x,
+                    tap_y,
+                    1,
+                    0.08,
+                    hold_seconds=hold_seconds,
+                    label="深海采集后点击",
+                )
             except AdbError as exc:
                 self.log(f"深海采集已保存，但点击失败：{exc}")
                 QMessageBox.warning(self, "深海动作截图", f"素材已保存，但点击失败：{exc}")
@@ -8415,6 +8478,9 @@ class MainWindow(QMainWindow):
         step = create_step(step_type, f"{step_type}_{count:03d}")
         if step_type == "question":
             self.apply_latest_question_layout(step, show_message=False)
+        if step_type == "swipe":
+            start, end = self.default_swipe_coords(str(step.get("input", {}).get("direction") or "up"))
+            step.setdefault("input", {}).update({"start_coord": start, "end_coord": end})
         placement = self.place_step_in_context(step, insert_after)
         self.refresh_step_list(select_step_id=step["id"])
         if placement == "loop":
@@ -8423,6 +8489,24 @@ class MainWindow(QMainWindow):
             self.log(f"已插入步骤：{step['name']}")
         else:
             self.log(f"已添加步骤：{step['name']}")
+
+    def add_swipe_step(self, direction: str, insert_after: bool = True) -> None:
+        self.sync_steps_from_list()
+        count = self.count_steps(self.flow["steps"]) + 1
+        label = "上滑" if direction == "up" else "下滑"
+        step = create_step("swipe", f"{label}_{count:03d}")
+        start, end = self.default_swipe_coords(direction)
+        step.setdefault("input", {}).update(
+            {
+                "direction": direction,
+                "start_coord": start,
+                "end_coord": end,
+            }
+        )
+        placement = self.place_step_in_context(step, insert_after)
+        self.refresh_step_list(select_step_id=step["id"])
+        where = "循环子步骤" if placement == "loop" else "步骤"
+        self.log(f"已插入{where}：{label} {start} -> {end}。")
 
     def count_steps(self, steps: list[dict[str, Any]]) -> int:
         total = 0
@@ -8749,7 +8833,7 @@ class MainWindow(QMainWindow):
 
     def absorb_wait_into_step(self, step: dict[str, Any], duration: float) -> bool:
         data = step.setdefault("input", {})
-        if step.get("type") == "click":
+        if step.get("type") in {"click", "swipe"}:
             data["wait_after"] = float(data.get("wait_after", 0.0)) + duration
             return True
         if step.get("type") in {"image_check", "find_target", "click_target"}:
@@ -8801,6 +8885,8 @@ class MainWindow(QMainWindow):
 
         if step["type"] == "click":
             self.populate_click_properties(step)
+        elif step["type"] == "swipe":
+            self.populate_swipe_properties(step)
         elif step["type"] == "wait":
             self.populate_wait_properties(step)
         elif step["type"] in {"image_check", "find_target", "click_target"}:
@@ -8862,6 +8948,7 @@ class MainWindow(QMainWindow):
         self.property_layout.addRow("屏幕坐标", row)
 
         self.add_click_repeat_controls(step)
+        self.add_click_hold_control(step)
 
         for label, key in (("点击前等待", "wait_before"), ("点击后等待", "wait_after")):
             wait = QDoubleSpinBox()
@@ -8880,10 +8967,22 @@ class MainWindow(QMainWindow):
     def add_click_count_control(self, step: dict[str, Any], key: str, label: str, default: int = 1) -> None:
         data = step.setdefault("input", {})
         click_count = QSpinBox()
-        click_count.setRange(1, 20)
+        click_count.setRange(1, MAX_CLICK_COUNT)
         click_count.setValue(max(1, int(data.get(key, default) or default)))
+        click_count.setToolTip("已取消原来的 20 次上限；请谨慎设置很大的连点次数。")
         click_count.valueChanged.connect(lambda value, k=key: self.update_input(step, k, value))
         self.property_layout.addRow(label, click_count)
+
+    def add_click_hold_control(self, step: dict[str, Any], key: str = "hold_seconds", label: str = "按住秒数") -> None:
+        data = step.setdefault("input", {})
+        hold = QDoubleSpinBox()
+        hold.setRange(0, 60)
+        hold.setDecimals(2)
+        hold.setSingleStep(0.1)
+        hold.setSpecialValueText("普通点击")
+        hold.setValue(max(0.0, float(data.get(key, 0.0) or 0.0)))
+        hold.valueChanged.connect(lambda value, k=key: self.update_input(step, k, value))
+        self.property_layout.addRow(label, hold)
 
     def add_click_interval_control(self, step: dict[str, Any], key: str = "click_interval", label: str = "连点间隔") -> None:
         data = step.setdefault("input", {})
@@ -8906,6 +9005,97 @@ class MainWindow(QMainWindow):
     ) -> None:
         self.add_click_count_control(step, count_key, count_label)
         self.add_click_interval_control(step, interval_key, interval_label)
+
+    def default_swipe_coords(self, direction: str = "up") -> tuple[list[int], list[int]]:
+        screen_w, screen_h = self.current_screen_size()
+        x = max(0, min(screen_w - 1, int(round(screen_w * 0.5))))
+        top_y = max(0, min(screen_h - 1, int(round(screen_h * 0.30))))
+        bottom_y = max(0, min(screen_h - 1, int(round(screen_h * 0.76))))
+        if direction == "down":
+            return [x, top_y], [x, bottom_y]
+        return [x, bottom_y], [x, top_y]
+
+    def apply_swipe_direction(self, step: dict[str, Any], direction: str) -> None:
+        start, end = self.default_swipe_coords(direction)
+        data = step.setdefault("input", {})
+        data["direction"] = direction
+        data["start_coord"] = start
+        data["end_coord"] = end
+        self.update_dirty_indicator()
+        self.populate_properties(step)
+
+    def update_swipe_direction(self, step: dict[str, Any], direction: str) -> None:
+        if direction in {"up", "down"}:
+            self.apply_swipe_direction(step, direction)
+            return
+        self.update_input(step, "direction", "custom")
+
+    def update_swipe_coord(self, step: dict[str, Any], key: str, index: int, value: int) -> None:
+        self.update_input_coord(step, key, index, value)
+        step.setdefault("input", {})["direction"] = "custom"
+
+    def populate_swipe_properties(self, step: dict[str, Any]) -> None:
+        data = step.setdefault("input", {})
+        current_direction = str(data.get("direction") or "up")
+        default_start, default_end = self.default_swipe_coords(current_direction)
+        start = data.get("start_coord") if isinstance(data.get("start_coord"), list) else default_start
+        end = data.get("end_coord") if isinstance(data.get("end_coord"), list) else default_end
+
+        direction = QComboBox()
+        direction.addItem("上滑", "up")
+        direction.addItem("下滑", "down")
+        direction.addItem("自定义", "custom")
+        direction_index = direction.findData(current_direction)
+        direction.setCurrentIndex(direction_index if direction_index >= 0 else 2)
+        direction.currentIndexChanged.connect(
+            lambda _index, combo=direction: self.update_swipe_direction(step, str(combo.currentData()))
+        )
+        self.property_layout.addRow("方向", direction)
+
+        presets = QHBoxLayout()
+        swipe_up = QPushButton("套用上滑")
+        swipe_down = QPushButton("套用下滑")
+        swipe_up.clicked.connect(lambda: self.apply_swipe_direction(step, "up"))
+        swipe_down.clicked.connect(lambda: self.apply_swipe_direction(step, "down"))
+        presets.addWidget(swipe_up)
+        presets.addWidget(swipe_down)
+        self.property_layout.addRow("快捷", presets)
+
+        for label, key, coord in (("起点", "start_coord", start), ("终点", "end_coord", end)):
+            row = QHBoxLayout()
+            x = QSpinBox()
+            y = QSpinBox()
+            for spin in (x, y):
+                spin.setRange(0, 10000)
+            x.setValue(int(coord[0] if len(coord) > 0 else 0))
+            y.setValue(int(coord[1] if len(coord) > 1 else 0))
+            x.valueChanged.connect(lambda value, k=key: self.update_swipe_coord(step, k, 0, value))
+            y.valueChanged.connect(lambda value, k=key: self.update_swipe_coord(step, k, 1, value))
+            row.addWidget(QLabel("X"))
+            row.addWidget(x)
+            row.addWidget(QLabel("Y"))
+            row.addWidget(y)
+            self.property_layout.addRow(label, row)
+
+        duration = QDoubleSpinBox()
+        duration.setRange(0.05, 10)
+        duration.setDecimals(2)
+        duration.setSingleStep(0.05)
+        duration.setValue(float(data.get("duration_seconds", 0.45)))
+        duration.valueChanged.connect(lambda value: self.update_input(step, "duration_seconds", value))
+        self.property_layout.addRow("滑动秒数", duration)
+
+        self.add_click_count_control(step, "swipe_count", "滑动次数")
+        self.add_click_interval_control(step, "swipe_interval", "滑动间隔")
+
+        for label, key in (("滑动前等待", "wait_before"), ("滑动后等待", "wait_after")):
+            wait = QDoubleSpinBox()
+            wait.setRange(0, 999)
+            wait.setDecimals(2)
+            wait.setSingleStep(0.1)
+            wait.setValue(float(data.get(key, 0.0)))
+            wait.valueChanged.connect(lambda value, k=key: self.update_input(step, k, value))
+            self.property_layout.addRow(label, wait)
 
     def populate_wait_properties(self, step: dict[str, Any]) -> None:
         duration = QDoubleSpinBox()
@@ -11078,6 +11268,8 @@ class MainWindow(QMainWindow):
             step_type = step["type"]
             if step_type == "click":
                 ok = self.execute_click(step)
+            elif step_type == "swipe":
+                ok = self.execute_swipe(step)
             elif step_type == "wait":
                 duration = float(step["input"].get("duration", 1.0))
                 if not self.sleep_with_events(duration):
@@ -11463,16 +11655,23 @@ class MainWindow(QMainWindow):
         count: int = 1,
         interval: float = 0.08,
         *,
+        hold_seconds: float = 0.0,
         label: str = "ADB 点击",
     ) -> bool:
         click_count = max(1, int(count or 1))
         click_interval = max(0.0, float(interval or 0.0))
+        hold = max(0.0, float(hold_seconds or 0.0))
+        hold_ms = max(1, int(round(hold * 1000))) if hold > 0 else 0
         for click_index in range(click_count):
             if self._stop_requested:
                 return False
-            self.adb.tap(int(x), int(y))
+            if hold_ms:
+                self.adb.long_press(int(x), int(y), hold_ms)
+            else:
+                self.adb.tap(int(x), int(y))
             suffix = f" ({click_index + 1}/{click_count})" if click_count > 1 else ""
-            self.log(f"{label}{suffix}：{int(x)}, {int(y)}")
+            hold_text = f"（按住 {hold:.2f}s）" if hold_ms else ""
+            self.log(f"{label}{suffix}{hold_text}：{int(x)}, {int(y)}")
             if click_index < click_count - 1 and click_interval:
                 if not self.sleep_with_events(click_interval):
                     return False
@@ -11493,12 +11692,48 @@ class MainWindow(QMainWindow):
             int(coord[1]),
             data.get("click_count", 1),
             data.get("click_interval", 0.08),
+            hold_seconds=data.get("hold_seconds", 0.0),
         ):
             return False
         if wait_after:
             if not self.sleep_with_events(wait_after):
                 return False
             self.log(f"点击后等待 {wait_after:.2f}s 完成。")
+        return True
+
+    def execute_swipe(self, step: dict[str, Any]) -> bool:
+        data = step.setdefault("input", {})
+        wait_before = float(data.get("wait_before", 0.0))
+        wait_after = float(data.get("wait_after", 0.4))
+        if wait_before:
+            if not self.sleep_with_events(wait_before):
+                return False
+        direction = str(data.get("direction") or "up")
+        default_start, default_end = self.default_swipe_coords(direction)
+        start = data.get("start_coord") if isinstance(data.get("start_coord"), list) else default_start
+        end = data.get("end_coord") if isinstance(data.get("end_coord"), list) else default_end
+        if len(start) < 2 or len(end) < 2:
+            self.log("滑动步骤缺少起点或终点。")
+            return False
+        swipe_count = max(1, int(data.get("swipe_count", 1) or 1))
+        swipe_interval = max(0.0, float(data.get("swipe_interval", 0.15) or 0.0))
+        duration_ms = max(1, int(round(max(0.05, float(data.get("duration_seconds", 0.45) or 0.45)) * 1000)))
+        for swipe_index in range(swipe_count):
+            if self._stop_requested:
+                return False
+            self.adb.swipe(int(start[0]), int(start[1]), int(end[0]), int(end[1]), duration_ms)
+            suffix = f" ({swipe_index + 1}/{swipe_count})" if swipe_count > 1 else ""
+            self.log(
+                f"ADB 滑动{suffix}：{int(start[0])}, {int(start[1])} -> "
+                f"{int(end[0])}, {int(end[1])}，{duration_ms / 1000:.2f}s"
+            )
+            if swipe_index < swipe_count - 1 and swipe_interval:
+                if not self.sleep_with_events(swipe_interval):
+                    return False
+        if wait_after:
+            if not self.sleep_with_events(wait_after):
+                return False
+            self.log(f"滑动后等待 {wait_after:.2f}s 完成。")
         return True
 
     def execute_read_game_coord_step(self, step: dict[str, Any]) -> bool:

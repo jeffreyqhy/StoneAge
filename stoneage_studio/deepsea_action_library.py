@@ -302,6 +302,7 @@ class DeepSeaActionLibrary:
         swipe_start: list[int] | None = None,
         swipe_end: list[int] | None = None,
         duration_ms: int = 450,
+        hold_seconds: float = 0.0,
         threshold: float = 0.85,
         wait_after: float = 0.4,
         note: str = "",
@@ -322,6 +323,7 @@ class DeepSeaActionLibrary:
             "swipe_start": list(swipe_start) if swipe_start else None,
             "swipe_end": list(swipe_end) if swipe_end else None,
             "duration_ms": int(duration_ms),
+            "hold_seconds": max(0.0, float(hold_seconds or 0.0)),
             "threshold": float(threshold),
             "wait_after": float(wait_after),
             "note": str(note or ""),
@@ -397,6 +399,7 @@ class DeepSeaActionLibrary:
                         "type": "tap",
                         "name": step.get("label") or display_action_name(str(item.get("action_key") or "")),
                         "click_point": step.get("click_point"),
+                        "hold_seconds": max(0.0, float(step.get("hold_seconds") or 0.0)),
                         "wait_after": float(step.get("wait_after") or 0.4),
                     }
                 )
@@ -412,6 +415,7 @@ class DeepSeaActionLibrary:
                     "search_bbox": step.get("search_bbox"),
                     "click_offset": step.get("click_offset"),
                     "click_point": step.get("click_point"),
+                    "hold_seconds": max(0.0, float(step.get("hold_seconds") or 0.0)),
                     "wait_after": float(step.get("wait_after") or 0.4),
                 }
             )

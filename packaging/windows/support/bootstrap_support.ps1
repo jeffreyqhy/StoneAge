@@ -8,6 +8,7 @@ if (-not $AppDir) {
     $AppDir = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 }
 
+$AppDir = $AppDir.Trim().Trim('"')
 $AppDir = (Resolve-Path $AppDir).Path
 $SupportDir = Join-Path $AppDir "support"
 $PlatformToolsDir = Join-Path $SupportDir "platform-tools"

@@ -1,5 +1,6 @@
 param(
-    [switch]$SkipInstall
+    [switch]$SkipInstall,
+    [switch]$IncludeData
 )
 
 $ErrorActionPreference = "Stop"
@@ -37,4 +38,23 @@ Copy-Item "packaging/windows/run.bat" (Join-Path $AppDir "run.bat") -Force
 Copy-Item "packaging/windows/WINDOWS_README.md" (Join-Path $AppDir "WINDOWS_README.md") -Force
 Copy-Item "packaging/windows/support/bootstrap_support.ps1" (Join-Path $AppDir "support/bootstrap_support.ps1") -Force
 
+if ($IncludeData) {
+    $DataSource = Join-Path $Root "data"
+    $DataTarget = Join-Path $AppDir "data"
+    if (Test-Path $DataSource) {
+        if (Test-Path $DataTarget) {
+            Remove-Item $DataTarget -Recurse -Force
+        }
+        Write-Host "Copying existing scripts/assets data..."
+        Copy-Item $DataSource $DataTarget -Recurse -Force
+    }
+}
+
+$ZipPath = Join-Path $Root "dist\StoneAge-Script-Studio-Windows.zip"
+if (Test-Path $ZipPath) {
+    Remove-Item $ZipPath -Force
+}
+Compress-Archive -Path (Join-Path $AppDir "*") -DestinationPath $ZipPath -Force
+
 Write-Host "Windows package ready: $AppDir"
+Write-Host "Windows zip ready: $ZipPath"

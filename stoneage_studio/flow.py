@@ -10,6 +10,7 @@ from typing import Any
 
 STEP_LABELS: dict[str, str] = {
     "click": "点击",
+    "swipe": "滑动",
     "wait": "等待",
     "image_check": "识别图片",
     "ocr_text": "判断文字",
@@ -114,9 +115,21 @@ def default_input(step_type: str) -> dict[str, Any]:
             "screen_coord": [0, 0],
             "click_count": 1,
             "click_interval": 0.08,
+            "hold_seconds": 0.0,
             "wait_before": 0.0,
             "wait_after": 1.0,
             "confirm_success": False,
+        }
+    if step_type == "swipe":
+        return {
+            "direction": "up",
+            "start_coord": [960, 780],
+            "end_coord": [960, 300],
+            "duration_seconds": 0.45,
+            "swipe_count": 1,
+            "swipe_interval": 0.15,
+            "wait_before": 0.0,
+            "wait_after": 0.4,
         }
     if step_type == "wait":
         return {"duration": 1.0}

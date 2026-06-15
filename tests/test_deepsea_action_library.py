@@ -116,11 +116,13 @@ class DeepSeaActionLibraryTests(unittest.TestCase):
                 step_label="选择恩惠",
                 step_type="recorded_tap",
                 click_point=[1400, 320],
+                hold_seconds=1.25,
             )
 
             sequence = library.build_click_sequence("3号人物", "恩惠6")
             self.assertEqual(sequence[0]["type"], "tap")
             self.assertEqual(sequence[0]["click_point"], [1400, 320])
+            self.assertEqual(sequence[0]["hold_seconds"], 1.25)
 
 
 if __name__ == "__main__":

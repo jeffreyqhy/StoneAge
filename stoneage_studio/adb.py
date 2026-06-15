@@ -8,6 +8,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from .process import subprocess_no_window_kwargs
+
 
 @dataclass(frozen=True)
 class DeviceInfo:
@@ -38,6 +40,7 @@ class AdbClient:
                 capture_output=True,
                 text=True,
                 timeout=8,
+                **subprocess_no_window_kwargs(),
             )
         except subprocess.CalledProcessError as exc:
             detail = (exc.stderr or exc.stdout or str(exc)).strip()
@@ -63,6 +66,7 @@ class AdbClient:
                 capture_output=True,
                 text=True,
                 timeout=8,
+                **subprocess_no_window_kwargs(),
             )
         except subprocess.CalledProcessError as exc:
             detail = (exc.stderr or exc.stdout or str(exc)).strip()
@@ -97,7 +101,7 @@ class AdbClient:
     def screencap_png(self) -> bytes:
         cmd = self._base() + ["exec-out", "screencap", "-p"]
         try:
-            data = subprocess.check_output(cmd, timeout=8)
+            data = subprocess.check_output(cmd, timeout=8, **subprocess_no_window_kwargs())
         except (OSError, subprocess.SubprocessError) as exc:
             raise AdbError(f"截图失败：{exc}") from exc
         if not data:
@@ -148,7 +152,7 @@ class AdbClient:
 
     def _run_action(self, cmd: list[str], label: str) -> None:
         try:
-            subprocess.run(cmd, check=True, capture_output=True, timeout=8)
+            subprocess.run(cmd, check=True, capture_output=True, timeout=8, **subprocess_no_window_kwargs())
         except (OSError, subprocess.SubprocessError) as exc:
             raise AdbError(f"ADB {label}失败：{exc}") from exc
 

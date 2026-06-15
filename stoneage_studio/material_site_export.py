@@ -12,6 +12,7 @@ from typing import Any
 
 from .material_db import MaterialDatabase
 from .material_db.database import now_iso
+from .process import subprocess_no_window_kwargs
 
 
 PUBLIC_SITE_ROOT = Path(__file__).with_name("web") / "public_materials"
@@ -539,6 +540,7 @@ def _git(
         capture_output=True,
         timeout=timeout,
         check=False,
+        **subprocess_no_window_kwargs(),
     )
     if result.returncode != 0 and not allow_failure:
         combined = "\n".join(part for part in (result.stdout.strip(), result.stderr.strip()) if part)

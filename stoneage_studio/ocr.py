@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .process import subprocess_no_window_kwargs
+
 
 @dataclass
 class OCRResult:
@@ -139,6 +141,7 @@ class OCREngine:
                                 capture_output=True,
                                 text=True,
                                 timeout=5,
+                                **subprocess_no_window_kwargs(),
                             )
                         except Exception:
                             continue
@@ -319,6 +322,7 @@ class OCREngine:
                 capture_output=True,
                 text=True,
                 timeout=8,
+                **subprocess_no_window_kwargs(),
             )
         except Exception as exc:  # noqa: BLE001 - optional backend probing
             return OCRResult("", 0.0, "tesseract-cli", available=False, error=str(exc))
