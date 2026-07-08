@@ -9,6 +9,7 @@ from xml.etree import ElementTree as ET
 
 
 DEEPSEA_6F_CHEST_KEY = "deepsea_6f"
+DEEPSEA_TICKET_DIAMOND_PRICE = 2888.0
 
 DEEPSEA_6F_CHEST_ITEMS = [
     "焰狱魔兽自选",
@@ -40,19 +41,108 @@ class ChestItemStat:
     rate: float
 
 
+@dataclass(frozen=True)
+class ChestItemProfit:
+    item_name: str
+    quantity: int
+    diamond_price: float
+    revenue_diamonds: float
+    rate: float
+
+
+@dataclass(frozen=True)
+class ChestProfitSummary:
+    total_quantity: int
+    ticket_diamond_price: float
+    total_revenue_diamonds: float
+    total_cost_diamonds: float
+    net_profit_diamonds: float
+    revenue_cost_ratio: float | None
+    net_cost_ratio: float | None
+    items: list[ChestItemProfit]
+
+
 def normalize_chest_item_name(value: str) -> str:
     return " ".join(str(value or "").strip().split())
 
 
+def normalize_diamond_price(value: object) -> float:
+    try:
+        return max(0.0, float(value or 0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def build_item_stats(totals: dict[str, int], items: list[str] | None = None) -> list[ChestItemStat]:
-    ordered_items = list(items or DEEPSEA_6F_CHEST_ITEMS)
-    total_quantity = sum(max(0, int(value or 0)) for value in totals.values())
+    normalized_totals: dict[str, int] = {}
+    for raw_name, raw_quantity in totals.items():
+        name = normalize_chest_item_name(raw_name)
+        if not name:
+            continue
+        normalized_totals[name] = normalized_totals.get(name, 0) + max(0, int(raw_quantity or 0))
+    ordered_items: list[str] = []
+    seen: set[str] = set()
+    for item in list(items or DEEPSEA_6F_CHEST_ITEMS):
+        name = normalize_chest_item_name(item)
+        if name and name not in seen:
+            ordered_items.append(name)
+            seen.add(name)
+    for name in sorted(normalized_totals):
+        if name not in seen and normalized_totals.get(name, 0) > 0:
+            ordered_items.append(name)
+            seen.add(name)
+    total_quantity = sum(normalized_totals.values())
     stats: list[ChestItemStat] = []
     for item in ordered_items:
-        quantity = max(0, int(totals.get(item, 0) or 0))
+        quantity = normalized_totals.get(item, 0)
         rate = quantity / total_quantity if total_quantity > 0 else 0.0
         stats.append(ChestItemStat(item_name=item, quantity=quantity, rate=rate))
     return stats
+
+
+def build_profit_summary(
+    totals: dict[str, int],
+    diamond_prices: dict[str, float | int | str],
+    items: list[str] | None = None,
+    *,
+    ticket_diamond_price: float = DEEPSEA_TICKET_DIAMOND_PRICE,
+) -> ChestProfitSummary:
+    stats = build_item_stats(totals, items)
+    normalized_prices = {
+        normalize_chest_item_name(item_name): normalize_diamond_price(price)
+        for item_name, price in diamond_prices.items()
+    }
+    total_quantity = sum(item.quantity for item in stats)
+    item_rows: list[ChestItemProfit] = []
+    total_revenue = 0.0
+    for item in stats:
+        price = normalized_prices.get(item.item_name, 0.0)
+        revenue = float(item.quantity) * price
+        total_revenue += revenue
+        item_rows.append(
+            ChestItemProfit(
+                item_name=item.item_name,
+                quantity=item.quantity,
+                diamond_price=price,
+                revenue_diamonds=revenue,
+                rate=item.rate,
+            )
+        )
+    ticket_price = normalize_diamond_price(ticket_diamond_price)
+    total_cost = float(total_quantity) * ticket_price
+    net_profit = total_revenue - total_cost
+    revenue_ratio = total_revenue / total_cost if total_cost > 0 else None
+    net_ratio = net_profit / total_cost if total_cost > 0 else None
+    return ChestProfitSummary(
+        total_quantity=total_quantity,
+        ticket_diamond_price=ticket_price,
+        total_revenue_diamonds=total_revenue,
+        total_cost_diamonds=total_cost,
+        net_profit_diamonds=net_profit,
+        revenue_cost_ratio=revenue_ratio,
+        net_cost_ratio=net_ratio,
+        items=item_rows,
+    )
 
 
 def _column_index(column_letters: str) -> int:
@@ -134,8 +224,13 @@ def _excel_date_text(value: str) -> str:
     return text
 
 
-def read_deepsea_matrix_excel_records(path: str | Path) -> list[dict[str, str | int]]:
+def read_deepsea_matrix_excel_records(
+    path: str | Path,
+    items: list[str] | None = None,
+) -> list[dict[str, str | int]]:
     """Read records from the horizontal Excel template without requiring openpyxl."""
+    allowed_items = {normalize_chest_item_name(item) for item in list(items or DEEPSEA_6F_CHEST_ITEMS)}
+    allowed_items.discard("")
     workbook_path = Path(path)
     if not workbook_path.exists():
         raise FileNotFoundError(str(workbook_path))
@@ -158,7 +253,7 @@ def read_deepsea_matrix_excel_records(path: str | Path) -> list[dict[str, str | 
     records: list[dict[str, str | int]] = []
     for row in range(14, 33):
         item = normalize_chest_item_name(values.get((row, 1), ""))
-        if item not in DEEPSEA_6F_CHEST_ITEMS:
+        if item not in allowed_items:
             continue
         for col in range(3, max_col + 1):
             raw_quantity = str(values.get((row, col), "")).strip()

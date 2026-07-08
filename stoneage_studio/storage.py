@@ -11,6 +11,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .deepsea_chest import (
+    DEEPSEA_6F_CHEST_ITEMS,
+    DEEPSEA_6F_CHEST_KEY,
+    DEEPSEA_TICKET_DIAMOND_PRICE,
+    normalize_chest_item_name,
+    normalize_diamond_price,
+)
+
 
 MAP_DIRS = [
     "raw",
@@ -332,13 +340,80 @@ class ProjectStorage:
                     ON deepsea_chest_records(chest_key, created_at);
                 CREATE INDEX IF NOT EXISTS idx_deepsea_chest_records_key_item
                     ON deepsea_chest_records(chest_key, item_name);
+
+                CREATE TABLE IF NOT EXISTS deepsea_chest_items (
+                    id TEXT PRIMARY KEY,
+                    chest_key TEXT NOT NULL DEFAULT 'deepsea_6f',
+                    item_name TEXT NOT NULL,
+                    diamond_price REAL NOT NULL DEFAULT 0,
+                    note TEXT NOT NULL DEFAULT '',
+                    display_order INTEGER NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(chest_key, item_name)
+                );
+                CREATE INDEX IF NOT EXISTS idx_deepsea_chest_items_key_order
+                    ON deepsea_chest_items(chest_key, display_order);
+
+                CREATE TABLE IF NOT EXISTS deepsea_chest_settings (
+                    chest_key TEXT PRIMARY KEY,
+                    ticket_diamond_price REAL NOT NULL DEFAULT 2888,
+                    diamond_per_rmb REAL NOT NULL DEFAULT 550,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
                 """
             )
             self._ensure_question_columns(conn)
             self._ensure_bug_report_columns(conn)
             self._ensure_script_run_stats_columns(conn)
             self._ensure_movement_columns(conn)
+            self._ensure_deepsea_chest_schema(conn)
+            self._ensure_deepsea_chest_items(conn)
             self._migrate_question_answers(conn)
+
+    def _ensure_deepsea_chest_schema(self, conn: sqlite3.Connection) -> None:
+        item_columns = {row["name"] for row in conn.execute("PRAGMA table_info(deepsea_chest_items)")}
+        if "diamond_price" not in item_columns:
+            conn.execute("ALTER TABLE deepsea_chest_items ADD COLUMN diamond_price REAL NOT NULL DEFAULT 0")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS deepsea_chest_settings (
+                chest_key TEXT PRIMARY KEY,
+                ticket_diamond_price REAL NOT NULL DEFAULT 2888,
+                diamond_per_rmb REAL NOT NULL DEFAULT 550,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        timestamp = now_iso()
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO deepsea_chest_settings (
+                chest_key, ticket_diamond_price, diamond_per_rmb, created_at, updated_at
+            ) VALUES (?, ?, 550, ?, ?)
+            """,
+            (DEEPSEA_6F_CHEST_KEY, DEEPSEA_TICKET_DIAMOND_PRICE, timestamp, timestamp),
+        )
+
+    def _ensure_deepsea_chest_items(self, conn: sqlite3.Connection) -> None:
+        count = conn.execute(
+            "SELECT COUNT(1) FROM deepsea_chest_items WHERE chest_key = ?",
+            (DEEPSEA_6F_CHEST_KEY,),
+        ).fetchone()[0]
+        if int(count or 0) > 0:
+            return
+        timestamp = now_iso()
+        for index, item in enumerate(DEEPSEA_6F_CHEST_ITEMS, start=1):
+            conn.execute(
+                """
+                INSERT INTO deepsea_chest_items (
+                    id, chest_key, item_name, diamond_price, note, display_order, created_at, updated_at
+                ) VALUES (?, ?, ?, 0, '', ?, ?, ?)
+                """,
+                (uuid.uuid4().hex, DEEPSEA_6F_CHEST_KEY, item, index, timestamp, timestamp),
+            )
 
     def _ensure_question_columns(self, conn: sqlite3.Connection) -> None:
         existing = {row["name"] for row in conn.execute("PRAGMA table_info(questions)")}
@@ -629,6 +704,193 @@ class ProjectStorage:
         path.mkdir(parents=True, exist_ok=True)
         return path
 
+    def deepsea_chest_settings(self, chest_key: str = "deepsea_6f") -> dict[str, float]:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT ticket_diamond_price, diamond_per_rmb
+                FROM deepsea_chest_settings
+                WHERE chest_key = ?
+                """,
+                (chest_key,),
+            ).fetchone()
+            if row is None:
+                timestamp = now_iso()
+                conn.execute(
+                    """
+                    INSERT INTO deepsea_chest_settings (
+                        chest_key, ticket_diamond_price, diamond_per_rmb, created_at, updated_at
+                    ) VALUES (?, ?, 550, ?, ?)
+                    """,
+                    (chest_key, DEEPSEA_TICKET_DIAMOND_PRICE, timestamp, timestamp),
+                )
+                return {"ticket_diamond_price": DEEPSEA_TICKET_DIAMOND_PRICE, "diamond_per_rmb": 550.0}
+            ticket_price = normalize_diamond_price(row["ticket_diamond_price"]) or DEEPSEA_TICKET_DIAMOND_PRICE
+            diamond_per_rmb = normalize_diamond_price(row["diamond_per_rmb"]) or 550.0
+            return {"ticket_diamond_price": ticket_price, "diamond_per_rmb": diamond_per_rmb}
+
+    def update_deepsea_chest_settings(
+        self,
+        *,
+        diamond_per_rmb: float,
+        chest_key: str = "deepsea_6f",
+    ) -> None:
+        value = normalize_diamond_price(diamond_per_rmb)
+        if value <= 0:
+            raise ValueError("钻石/RMB 比例必须大于 0")
+        timestamp = now_iso()
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO deepsea_chest_settings (
+                    chest_key, ticket_diamond_price, diamond_per_rmb, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(chest_key) DO UPDATE SET
+                    ticket_diamond_price = excluded.ticket_diamond_price,
+                    diamond_per_rmb = excluded.diamond_per_rmb,
+                    updated_at = excluded.updated_at
+                """,
+                (chest_key, DEEPSEA_TICKET_DIAMOND_PRICE, value, timestamp, timestamp),
+            )
+
+    def list_deepsea_chest_items(self, chest_key: str = "deepsea_6f") -> list[sqlite3.Row]:
+        with self._connect() as conn:
+            return list(
+                conn.execute(
+                    """
+                    SELECT *
+                    FROM deepsea_chest_items
+                    WHERE chest_key = ?
+                    ORDER BY display_order ASC, item_name ASC
+                    """,
+                    (chest_key,),
+                )
+            )
+
+    def deepsea_chest_item_names(self, chest_key: str = "deepsea_6f") -> list[str]:
+        return [str(row["item_name"]) for row in self.list_deepsea_chest_items(chest_key)]
+
+    def deepsea_chest_item_prices(self, chest_key: str = "deepsea_6f") -> dict[str, float]:
+        return {
+            str(row["item_name"]): normalize_diamond_price(row["diamond_price"])
+            for row in self.list_deepsea_chest_items(chest_key)
+        }
+
+    def add_deepsea_chest_item(
+        self,
+        *,
+        item_name: str,
+        diamond_price: float = 0.0,
+        note: str = "",
+        chest_key: str = "deepsea_6f",
+    ) -> str:
+        item = normalize_chest_item_name(item_name)
+        if not item:
+            raise ValueError("道具名不能为空")
+        price = normalize_diamond_price(diamond_price)
+        timestamp = now_iso()
+        item_id = uuid.uuid4().hex
+        with self._connect() as conn:
+            existing = conn.execute(
+                "SELECT 1 FROM deepsea_chest_items WHERE chest_key = ? AND item_name = ?",
+                (chest_key, item),
+            ).fetchone()
+            if existing:
+                raise ValueError(f"道具已存在：{item}")
+            max_order = conn.execute(
+                "SELECT COALESCE(MAX(display_order), 0) FROM deepsea_chest_items WHERE chest_key = ?",
+                (chest_key,),
+            ).fetchone()[0]
+            conn.execute(
+                """
+                INSERT INTO deepsea_chest_items (
+                    id, chest_key, item_name, diamond_price, note, display_order, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (item_id, chest_key, item, price, str(note or "").strip(), int(max_order or 0) + 1, timestamp, timestamp),
+            )
+        return item_id
+
+    def update_deepsea_chest_item(
+        self,
+        item_id: str,
+        *,
+        item_name: str,
+        diamond_price: float | None = None,
+        note: str = "",
+    ) -> None:
+        item = normalize_chest_item_name(item_name)
+        if not item:
+            raise ValueError("道具名不能为空")
+        timestamp = now_iso()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM deepsea_chest_items WHERE id = ?",
+                (str(item_id).strip(),),
+            ).fetchone()
+            if row is None:
+                raise ValueError("道具不存在")
+            old_name = str(row["item_name"])
+            chest_key = str(row["chest_key"])
+            existing = conn.execute(
+                "SELECT id FROM deepsea_chest_items WHERE chest_key = ? AND item_name = ? AND id <> ?",
+                (chest_key, item, item_id),
+            ).fetchone()
+            if existing:
+                raise ValueError(f"道具已存在：{item}")
+            price = normalize_diamond_price(row["diamond_price"] if diamond_price is None else diamond_price)
+            conn.execute(
+                """
+                UPDATE deepsea_chest_items
+                SET item_name = ?, diamond_price = ?, note = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (item, price, str(note or "").strip(), timestamp, item_id),
+            )
+            if item != old_name:
+                conn.execute(
+                    """
+                    UPDATE deepsea_chest_records
+                    SET item_name = ?, updated_at = ?
+                    WHERE chest_key = ? AND item_name = ?
+                    """,
+                    (item, timestamp, chest_key, old_name),
+                )
+
+    def delete_deepsea_chest_items(self, item_ids: list[str]) -> int:
+        ids = [str(item_id).strip() for item_id in item_ids if str(item_id).strip()]
+        if not ids:
+            return 0
+        placeholders = ",".join("?" for _ in ids)
+        with self._connect() as conn:
+            cursor = conn.execute(f"DELETE FROM deepsea_chest_items WHERE id IN ({placeholders})", ids)
+            return int(cursor.rowcount or 0)
+
+    def reorder_deepsea_chest_items(self, item_ids: list[str], chest_key: str = "deepsea_6f") -> None:
+        ordered_ids: list[str] = []
+        seen: set[str] = set()
+        for item_id in item_ids:
+            value = str(item_id).strip()
+            if value and value not in seen:
+                ordered_ids.append(value)
+                seen.add(value)
+        timestamp = now_iso()
+        with self._connect() as conn:
+            rows = list(
+                conn.execute(
+                    "SELECT id FROM deepsea_chest_items WHERE chest_key = ? ORDER BY display_order ASC, item_name ASC",
+                    (chest_key,),
+                )
+            )
+            existing_ids = [str(row["id"]) for row in rows]
+            final_ids = [item_id for item_id in ordered_ids if item_id in existing_ids]
+            final_ids.extend(item_id for item_id in existing_ids if item_id not in set(final_ids))
+            for index, item_id in enumerate(final_ids, start=1):
+                conn.execute(
+                    "UPDATE deepsea_chest_items SET display_order = ?, updated_at = ? WHERE id = ?",
+                    (index, timestamp, item_id),
+                )
+
     def add_deepsea_chest_record(
         self,
         *,
@@ -638,7 +900,7 @@ class ProjectStorage:
         note: str = "",
         chest_key: str = "deepsea_6f",
     ) -> str:
-        item = str(item_name or "").strip()
+        item = normalize_chest_item_name(item_name)
         if not item:
             raise ValueError("item_name is required")
         qty = int(quantity)
@@ -668,7 +930,7 @@ class ProjectStorage:
         note: str = "",
         chest_key: str = "deepsea_6f",
     ) -> None:
-        item = str(item_name or "").strip()
+        item = normalize_chest_item_name(item_name)
         if not item:
             raise ValueError("item_name is required")
         qty = int(quantity)

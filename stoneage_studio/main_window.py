@@ -79,9 +79,10 @@ from .deepsea_operation_recorder import (
     parse_touch_device,
 )
 from .deepsea_chest import (
-    DEEPSEA_6F_CHEST_ITEMS,
     DEEPSEA_6F_CHEST_KEY,
+    build_profit_summary,
     build_item_stats,
+    normalize_chest_item_name,
     read_deepsea_matrix_excel_records,
 )
 from .coords.game_coord_reader import GameCoordReader
@@ -3789,9 +3790,10 @@ class MiniRunnerWindow(QWidget):
         self.controller = controller
         self._alerted_errors: set[str] = set()
         self._syncing_loop_count = False
+        self._loading_scripts = False
         self.setWindowTitle("StoneAge 运行")
-        self.setMinimumWidth(360)
-        self.resize(380, 250)
+        self.setMinimumWidth(420)
+        self.resize(440, 290)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -3812,7 +3814,18 @@ class MiniRunnerWindow(QWidget):
         self.status_label.setWordWrap(True)
         layout.addWidget(self.status_label)
 
-        self.script_label = QLabel("脚本：-")
+        script_row = QHBoxLayout()
+        script_row.setSpacing(6)
+        self.script_combo = QComboBox()
+        refresh_scripts = QPushButton("刷新")
+        load_script = QPushButton("加载")
+        script_row.addWidget(QLabel("脚本"))
+        script_row.addWidget(self.script_combo, 1)
+        script_row.addWidget(refresh_scripts)
+        script_row.addWidget(load_script)
+        layout.addLayout(script_row)
+
+        self.script_label = QLabel("当前：-")
         self.script_label.setWordWrap(True)
         layout.addWidget(self.script_label)
 
@@ -3858,6 +3871,9 @@ class MiniRunnerWindow(QWidget):
         run_all.clicked.connect(self.run_all)
         run_loop.clicked.connect(self.run_loop)
         stop.clicked.connect(self.controller.stop_run)
+        refresh_scripts.clicked.connect(self.load_scripts)
+        load_script.clicked.connect(self.load_selected_script)
+        self.script_combo.currentIndexChanged.connect(self.load_selected_script_from_combo)
         show_main.clicked.connect(self.show_main_window)
         hide_main.clicked.connect(self.controller.hide)
         bug_reports.clicked.connect(self.open_bug_reports)
@@ -3869,6 +3885,8 @@ class MiniRunnerWindow(QWidget):
         self.controller.runtime_status_changed.connect(self.update_runtime_status)
         self.controller.runtime_error_alert.connect(self.show_error_alert)
 
+        self.load_scripts()
+
     def set_stay_on_top(self, enabled: bool) -> None:
         was_visible = self.isVisible()
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, enabled)
@@ -3876,9 +3894,64 @@ class MiniRunnerWindow(QWidget):
             self.show()
             self.raise_()
 
+    def load_scripts(self) -> None:
+        current = self.controller.flow.get("script_name")
+        self._loading_scripts = True
+        try:
+            self.script_combo.clear()
+            matched_current = False
+            for row in self.controller.storage.list_script_flows():
+                self.script_combo.addItem(
+                    f"{row.get('script_name')}  ({row.get('step_count')}步)",
+                    row.get("path"),
+                )
+                index = self.script_combo.count() - 1
+                self.script_combo.setItemData(index, str(row.get("path") or ""), Qt.ItemDataRole.ToolTipRole)
+                if row.get("script_name") == current:
+                    self.script_combo.setCurrentIndex(index)
+                    matched_current = True
+            if not matched_current and self.script_combo.count() > 0:
+                self.script_combo.setCurrentIndex(0)
+        finally:
+            self._loading_scripts = False
+
+    def load_selected_script_from_combo(self, _index: int) -> None:
+        if self._loading_scripts:
+            return
+        self.load_selected_script(auto=True)
+
+    def selected_script_is_current(self, path: str | Path) -> bool:
+        current_path = self.controller.current_flow_path
+        if current_path is None:
+            return False
+        try:
+            return Path(path).resolve() == Path(current_path).resolve()
+        except OSError:
+            return Path(path) == Path(current_path)
+
+    def load_selected_script(self, checked: bool = False, *, auto: bool = False) -> bool:
+        del checked
+        path = self.script_combo.currentData()
+        if not path:
+            if not auto:
+                QMessageBox.information(self, "迷你运行窗", "没有可加载的副本流程。")
+            return False
+        if self.selected_script_is_current(path):
+            self.sync_from_controller()
+            return True
+        if not self.controller.confirm_save_if_dirty("迷你运行窗", "当前副本流程有未保存更改。加载其他脚本前要保存吗？"):
+            self.load_scripts()
+            return False
+        self.controller.load_flow_path(Path(path))
+        if not self.selected_script_is_current(path):
+            return False
+        self.sync_from_controller()
+        return True
+
     def sync_from_controller(self) -> None:
         script_name = str(self.controller.flow.get("script_name") or "-")
-        self.script_label.setText(f"脚本：{script_name}")
+        self.load_scripts()
+        self.script_label.setText(f"当前：{script_name}")
         self.sync_loop_count_from_runner(int(self.controller.runner_panel.loop_count.value()))
         stats = self.controller.storage.script_loop_stats(script_name) if script_name and script_name != "-" else {}
         self.update_loop_stats(
@@ -3926,7 +3999,7 @@ class MiniRunnerWindow(QWidget):
             return
         script_name = str(payload.get("script_name") or "")
         if script_name:
-            self.script_label.setText(f"脚本：{script_name}")
+            self.script_label.setText(f"当前：{script_name}")
         target = payload.get("target")
         target_text = "∞" if target is None else str(target)
         current_completed = int(payload.get("current_completed") or 0)
@@ -4515,7 +4588,11 @@ class DeepSeaChestStatsDialog(QDialog):
         super().__init__(parent)
         self.storage = storage
         self.records: list[Any] = []
+        self.chest_item_rows: list[Any] = []
+        self.chest_items: list[str] = []
+        self.profit_summary: Any | None = None
         self.selected_record_id: str | None = None
+        self.selected_chest_item_id: str | None = None
         self.setWindowTitle("深海6楼宝箱统计")
         self.resize(1320, 820)
 
@@ -4535,7 +4612,6 @@ class DeepSeaChestStatsDialog(QDialog):
         self.record_date_edit.setPlaceholderText("YYYY-MM-DD")
         self.record_date_edit.setMaximumWidth(120)
         self.item_combo = QComboBox()
-        self.item_combo.addItems(DEEPSEA_6F_CHEST_ITEMS)
         self.item_combo.setMinimumWidth(180)
         self.quantity_spin = QSpinBox()
         self.quantity_spin.setRange(1, 999999)
@@ -4639,6 +4715,127 @@ class DeepSeaChestStatsDialog(QDialog):
         self.overview_table.setAlternatingRowColors(True)
         right_layout.addWidget(self.overview_table, 1)
         self.content_tabs.addTab(stats_page, "统计总览")
+
+        profit_page = QWidget()
+        profit_layout = QVBoxLayout(profit_page)
+        profit_layout.setContentsMargins(0, 0, 0, 0)
+        profit_layout.setSpacing(8)
+
+        economy_row = QHBoxLayout()
+        self.ticket_cost_label = QLabel("深海票：2888 钻/张")
+        self.ticket_cost_label.setObjectName("ConnectionPill")
+        self.diamond_per_rmb_spin = QDoubleSpinBox()
+        self.diamond_per_rmb_spin.setRange(0.01, 999999999)
+        self.diamond_per_rmb_spin.setDecimals(2)
+        self.diamond_per_rmb_spin.setValue(550.0)
+        self.diamond_per_rmb_spin.setSuffix(" 钻/RMB")
+        self.diamond_per_rmb_spin.setMaximumWidth(180)
+        save_profit_settings = QPushButton("保存汇率")
+        save_profit_settings.clicked.connect(self.save_profit_settings)
+        self.diamond_per_rmb_spin.valueChanged.connect(lambda _value: self.refresh_profit_for_current_ratio())
+        economy_row.addWidget(self.ticket_cost_label)
+        economy_row.addSpacing(16)
+        economy_row.addWidget(QLabel("钻石汇率"))
+        economy_row.addWidget(self.diamond_per_rmb_spin)
+        economy_row.addWidget(save_profit_settings)
+        economy_row.addStretch(1)
+        profit_layout.addLayout(economy_row)
+
+        profit_summary_row = QHBoxLayout()
+        self.profit_revenue_label = QLabel("总收益：0 钻 / RMB 0.00")
+        self.profit_cost_label = QLabel("总成本：0 钻 / RMB 0.00")
+        self.profit_net_label = QLabel("净收益：0 钻 / RMB 0.00")
+        self.profit_ratio_label = QLabel("收益/成本：-")
+        for label in (
+            self.profit_revenue_label,
+            self.profit_cost_label,
+            self.profit_net_label,
+            self.profit_ratio_label,
+        ):
+            label.setObjectName("ConnectionPill")
+            profit_summary_row.addWidget(label)
+        profit_summary_row.addStretch(1)
+        profit_layout.addLayout(profit_summary_row)
+
+        profit_title = QLabel("收益分析")
+        profit_title.setObjectName("SectionLabel")
+        profit_layout.addWidget(profit_title)
+        self.profit_table = QTableWidget(0, 6)
+        self.profit_table.setHorizontalHeaderLabels(["物品", "累计数量", "钻石单价", "收益(钻)", "收益(RMB)", "出货率"])
+        self.profit_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.profit_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.profit_table.verticalHeader().setVisible(False)
+        self.profit_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        for col in range(1, 6):
+            self.profit_table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeMode.ResizeToContents)
+        self.profit_table.horizontalHeader().setStretchLastSection(True)
+        self.profit_table.setAlternatingRowColors(True)
+        profit_layout.addWidget(self.profit_table, 1)
+        self.content_tabs.addTab(profit_page, "收益分析")
+
+        item_page = QWidget()
+        item_layout = QVBoxLayout(item_page)
+        item_layout.setContentsMargins(0, 0, 0, 0)
+        item_title = QLabel("道具管理")
+        item_title.setObjectName("SectionLabel")
+        item_layout.addWidget(item_title)
+
+        item_form = QGridLayout()
+        item_form.setHorizontalSpacing(10)
+        item_form.setVerticalSpacing(8)
+        self.chest_item_name_edit = QLineEdit()
+        self.chest_item_name_edit.setPlaceholderText("道具名")
+        self.chest_item_price_spin = QDoubleSpinBox()
+        self.chest_item_price_spin.setRange(0, 999999999)
+        self.chest_item_price_spin.setDecimals(2)
+        self.chest_item_price_spin.setSuffix(" 钻")
+        self.chest_item_price_spin.setMaximumWidth(150)
+        self.chest_item_note_edit = QLineEdit()
+        self.chest_item_note_edit.setPlaceholderText("备注，可空")
+        item_form.addWidget(QLabel("道具"), 0, 0)
+        item_form.addWidget(self.chest_item_name_edit, 0, 1)
+        item_form.addWidget(QLabel("钻石单价"), 0, 2)
+        item_form.addWidget(self.chest_item_price_spin, 0, 3)
+        item_form.addWidget(QLabel("备注"), 0, 4)
+        item_form.addWidget(self.chest_item_note_edit, 0, 5)
+        item_layout.addLayout(item_form)
+
+        item_buttons = QHBoxLayout()
+        add_item_button = QPushButton("添加道具")
+        add_item_button.clicked.connect(self.add_chest_item)
+        save_item_button = QPushButton("保存修改")
+        save_item_button.clicked.connect(self.save_selected_chest_item)
+        delete_item_button = QPushButton("删除选中")
+        delete_item_button.clicked.connect(self.delete_selected_chest_items)
+        move_item_up_button = QPushButton("上移")
+        move_item_up_button.clicked.connect(lambda: self.move_selected_chest_item(-1))
+        move_item_down_button = QPushButton("下移")
+        move_item_down_button.clicked.connect(lambda: self.move_selected_chest_item(1))
+        clear_item_button = QPushButton("清空选择")
+        clear_item_button.clicked.connect(self.clear_chest_item_selection)
+        item_buttons.addWidget(add_item_button)
+        item_buttons.addWidget(save_item_button)
+        item_buttons.addWidget(delete_item_button)
+        item_buttons.addWidget(move_item_up_button)
+        item_buttons.addWidget(move_item_down_button)
+        item_buttons.addWidget(clear_item_button)
+        item_buttons.addStretch(1)
+        item_layout.addLayout(item_buttons)
+
+        self.chest_item_table = QTableWidget(0, 5)
+        self.chest_item_table.setHorizontalHeaderLabels(["顺序", "道具", "钻石单价", "备注", "已记录"])
+        self.chest_item_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.chest_item_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.chest_item_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.chest_item_table.verticalHeader().setVisible(False)
+        self.chest_item_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.chest_item_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.chest_item_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.chest_item_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.chest_item_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.chest_item_table.itemSelectionChanged.connect(self.load_selected_chest_item_into_form)
+        item_layout.addWidget(self.chest_item_table, 1)
+        self.content_tabs.addTab(item_page, "道具管理")
         layout.addWidget(self.content_tabs, 1)
 
         self.refresh_all()
@@ -4654,7 +4851,7 @@ class DeepSeaChestStatsDialog(QDialog):
         if not path:
             return
         try:
-            records = read_deepsea_matrix_excel_records(path)
+            records = read_deepsea_matrix_excel_records(path, self.chest_items)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "导入失败", str(exc))
             return
@@ -4678,10 +4875,110 @@ class DeepSeaChestStatsDialog(QDialog):
         self.refresh_all()
         self.content_tabs.setCurrentIndex(1)
 
+    def refresh_item_combo(self, preferred_item: str | None = None) -> None:
+        current = normalize_chest_item_name(preferred_item or self.item_combo.currentText())
+        self.item_combo.blockSignals(True)
+        self.item_combo.clear()
+        self.item_combo.addItems(self.chest_items)
+        if current:
+            index = self.item_combo.findText(current)
+            if index >= 0:
+                self.item_combo.setCurrentIndex(index)
+        self.item_combo.blockSignals(False)
+
+    def selected_chest_item_ids(self) -> list[str]:
+        rows = sorted({index.row() for index in self.chest_item_table.selectedIndexes()})
+        ids: list[str] = []
+        for row in rows:
+            item = self.chest_item_table.item(row, 1)
+            item_id = str(item.data(Qt.ItemDataRole.UserRole) or "").strip() if item else ""
+            if item_id:
+                ids.append(item_id)
+        return ids
+
+    def current_chest_item_payload(self) -> dict[str, Any]:
+        item = normalize_chest_item_name(self.chest_item_name_edit.text())
+        if not item:
+            raise ValueError("道具名不能为空。")
+        return {
+            "item_name": item,
+            "diamond_price": float(self.chest_item_price_spin.value()),
+            "note": self.chest_item_note_edit.text().strip(),
+        }
+
+    def add_chest_item(self) -> None:
+        try:
+            payload = self.current_chest_item_payload()
+            item_id = self.storage.add_deepsea_chest_item(chest_key=DEEPSEA_6F_CHEST_KEY, **payload)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "添加失败", str(exc))
+            return
+        self.selected_chest_item_id = item_id
+        self.status_label.setText(f"已添加道具：{payload['item_name']}")
+        self.refresh_all(select_item_id=item_id)
+        self.refresh_item_combo(preferred_item=payload["item_name"])
+
+    def save_selected_chest_item(self) -> None:
+        if not self.selected_chest_item_id:
+            QMessageBox.information(self, "保存修改", "请先在道具管理里选中一个道具。")
+            return
+        try:
+            payload = self.current_chest_item_payload()
+            self.storage.update_deepsea_chest_item(self.selected_chest_item_id, **payload)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "保存失败", str(exc))
+            return
+        keep_id = self.selected_chest_item_id
+        self.status_label.setText(f"已保存道具：{payload['item_name']}")
+        self.refresh_all(select_item_id=keep_id)
+        self.refresh_item_combo(preferred_item=payload["item_name"])
+
+    def delete_selected_chest_items(self) -> None:
+        ids = self.selected_chest_item_ids()
+        if not ids:
+            QMessageBox.information(self, "删除道具", "请先选择要删除的道具。")
+            return
+        totals = self.storage.deepsea_chest_totals(DEEPSEA_6F_CHEST_KEY)
+        selected_id_set = set(ids)
+        selected_names = [str(row["item_name"]) for row in self.chest_item_rows if str(row["id"]) in selected_id_set]
+        recorded_count = sum(int(totals.get(name, 0) or 0) for name in selected_names)
+        suffix = ""
+        if recorded_count > 0:
+            suffix = f"\n这些道具已有 {recorded_count} 个历史数量；删除清单不会删除历史记录，统计里仍会保留有数量的旧物品。"
+        if QMessageBox.question(self, "删除道具", f"确定从清单删除选中的 {len(ids)} 个道具吗？{suffix}") != QMessageBox.StandardButton.Yes:
+            return
+        deleted = self.storage.delete_deepsea_chest_items(ids)
+        self.selected_chest_item_id = None
+        self.status_label.setText(f"已删除 {deleted} 个道具清单项。")
+        self.clear_chest_item_selection()
+        self.refresh_all()
+
+    def move_selected_chest_item(self, direction: int) -> None:
+        ids = self.selected_chest_item_ids()
+        if len(ids) != 1:
+            QMessageBox.information(self, "调整顺序", "请只选中一个道具。")
+            return
+        ordered_ids = [str(row["id"]) for row in self.chest_item_rows]
+        current_index = ordered_ids.index(ids[0]) if ids[0] in ordered_ids else -1
+        target_index = current_index + direction
+        if current_index < 0 or target_index < 0 or target_index >= len(ordered_ids):
+            return
+        ordered_ids[current_index], ordered_ids[target_index] = ordered_ids[target_index], ordered_ids[current_index]
+        self.storage.reorder_deepsea_chest_items(ordered_ids, DEEPSEA_6F_CHEST_KEY)
+        self.selected_chest_item_id = ids[0]
+        self.refresh_all(select_item_id=ids[0])
+
+    def clear_chest_item_selection(self) -> None:
+        self.selected_chest_item_id = None
+        self.chest_item_table.clearSelection()
+        self.chest_item_name_edit.clear()
+        self.chest_item_price_spin.setValue(0.0)
+        self.chest_item_note_edit.clear()
+
     def current_form_payload(self) -> dict[str, Any]:
-        item = self.item_combo.currentText().strip()
-        if item not in DEEPSEA_6F_CHEST_ITEMS:
-            raise ValueError("请选择深海6楼物品。")
+        item = normalize_chest_item_name(self.item_combo.currentText())
+        if item not in self.chest_items:
+            raise ValueError("请选择深海6楼道具。")
         date_text = self.record_date_edit.text().strip()
         if not date_text:
             raise ValueError("日期不能为空。")
@@ -4773,13 +5070,49 @@ class DeepSeaChestStatsDialog(QDialog):
         self.note_edit.setText(str(row["note"] or ""))
         self.status_label.setText("已载入选中记录，可修改后保存。")
 
-    def refresh_all(self, select_id: str | None = None) -> None:
+    def load_selected_chest_item_into_form(self) -> None:
+        rows = sorted({index.row() for index in self.chest_item_table.selectedIndexes()})
+        if len(rows) != 1:
+            self.selected_chest_item_id = None
+            return
+        row_index = rows[0]
+        if row_index < 0 or row_index >= len(self.chest_item_rows):
+            self.selected_chest_item_id = None
+            return
+        row = self.chest_item_rows[row_index]
+        self.selected_chest_item_id = str(row["id"])
+        self.chest_item_name_edit.setText(str(row["item_name"] or ""))
+        self.chest_item_price_spin.setValue(float(row["diamond_price"] or 0))
+        self.chest_item_note_edit.setText(str(row["note"] or ""))
+        self.status_label.setText("已载入道具，可修改后保存。")
+
+    def refresh_all(self, select_id: str | None = None, select_item_id: str | None = None) -> None:
+        preferred_item = self.item_combo.currentText()
+        self.chest_item_rows = self.storage.list_deepsea_chest_items(DEEPSEA_6F_CHEST_KEY)
+        self.chest_items = [str(row["item_name"]) for row in self.chest_item_rows]
+        self.refresh_item_combo(preferred_item=preferred_item)
         self.records = self.storage.list_deepsea_chest_records(DEEPSEA_6F_CHEST_KEY)
         self.refresh_record_table(select_id=select_id)
         totals = self.storage.deepsea_chest_totals(DEEPSEA_6F_CHEST_KEY)
-        stats = build_item_stats(totals, DEEPSEA_6F_CHEST_ITEMS)
+        stats = build_item_stats(totals, self.chest_items)
+        settings = self.storage.deepsea_chest_settings(DEEPSEA_6F_CHEST_KEY)
+        self.diamond_per_rmb_spin.blockSignals(True)
+        self.diamond_per_rmb_spin.setValue(float(settings.get("diamond_per_rmb") or 550.0))
+        self.diamond_per_rmb_spin.blockSignals(False)
+        prices = {
+            str(row["item_name"]): float(row["diamond_price"] or 0)
+            for row in self.chest_item_rows
+        }
+        self.profit_summary = build_profit_summary(
+            totals,
+            prices,
+            self.chest_items,
+            ticket_diamond_price=float(settings.get("ticket_diamond_price") or 2888.0),
+        )
         self.refresh_stats(stats)
         self.refresh_overview_table(stats)
+        self.refresh_profit_for_current_ratio()
+        self.refresh_chest_item_table(totals, select_item_id=select_item_id)
 
     def refresh_record_table(self, select_id: str | None = None) -> None:
         self.record_table.blockSignals(True)
@@ -4814,8 +5147,83 @@ class DeepSeaChestStatsDialog(QDialog):
         self.record_count_label.setText(f"记录数：{len(self.records)}")
         self.top_item_label.setText(f"最多：{top.item_name} {top.quantity}" if top else "最多：-")
 
+    def save_profit_settings(self) -> None:
+        try:
+            self.storage.update_deepsea_chest_settings(
+                chest_key=DEEPSEA_6F_CHEST_KEY,
+                diamond_per_rmb=float(self.diamond_per_rmb_spin.value()),
+            )
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "保存汇率失败", str(exc))
+            return
+        self.status_label.setText(f"已保存汇率：{self.diamond_per_rmb_spin.value():.2f} 钻/RMB")
+        self.refresh_all()
+        self.content_tabs.setCurrentIndex(2)
+
+    def format_diamonds(self, value: float | int | None) -> str:
+        amount = float(value or 0)
+        if abs(amount - round(amount)) < 0.005:
+            return f"{amount:,.0f} 钻"
+        return f"{amount:,.2f} 钻"
+
+    def format_rmb(self, diamonds: float | int | None, diamond_per_rmb: float) -> str:
+        rate = float(diamond_per_rmb or 0)
+        if rate <= 0:
+            return "RMB -"
+        return f"RMB {float(diamonds or 0) / rate:,.2f}"
+
+    def format_ratio(self, value: float | None) -> str:
+        if value is None:
+            return "-"
+        return f"{float(value):.2f}"
+
+    def refresh_profit_for_current_ratio(self) -> None:
+        if self.profit_summary is None:
+            return
+        summary = self.profit_summary
+        diamond_per_rmb = float(self.diamond_per_rmb_spin.value())
+        self.ticket_cost_label.setText(f"深海票：{self.format_diamonds(summary.ticket_diamond_price)}/张")
+        self.profit_revenue_label.setText(
+            f"总收益：{self.format_diamonds(summary.total_revenue_diamonds)} / "
+            f"{self.format_rmb(summary.total_revenue_diamonds, diamond_per_rmb)}"
+        )
+        self.profit_cost_label.setText(
+            f"总成本：{self.format_diamonds(summary.total_cost_diamonds)} / "
+            f"{self.format_rmb(summary.total_cost_diamonds, diamond_per_rmb)}"
+        )
+        self.profit_net_label.setText(
+            f"净收益：{self.format_diamonds(summary.net_profit_diamonds)} / "
+            f"{self.format_rmb(summary.net_profit_diamonds, diamond_per_rmb)}"
+        )
+        self.profit_ratio_label.setText(
+            f"收益/成本：{self.format_ratio(summary.revenue_cost_ratio)}"
+            f"（净 {self.format_ratio(summary.net_cost_ratio)}）"
+        )
+
+        item_order = {name: index for index, name in enumerate(self.chest_items)}
+        rows = sorted(
+            summary.items,
+            key=lambda item: (-item.revenue_diamonds, item_order.get(item.item_name, len(item_order))),
+        )
+        self.profit_table.setRowCount(len(rows))
+        for row_index, item in enumerate(rows):
+            values = [
+                item.item_name,
+                item.quantity,
+                self.format_diamonds(item.diamond_price),
+                self.format_diamonds(item.revenue_diamonds),
+                self.format_rmb(item.revenue_diamonds, diamond_per_rmb),
+                f"{item.rate:.2%}" if summary.total_quantity else "",
+            ]
+            for col, value in enumerate(values):
+                table_item = QTableWidgetItem(str(value))
+                if col in {1, 2, 3, 4, 5}:
+                    table_item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.profit_table.setItem(row_index, col, table_item)
+
     def refresh_overview_table(self, stats: list[Any]) -> None:
-        rows = sorted(stats, key=lambda item: (-item.quantity, DEEPSEA_6F_CHEST_ITEMS.index(item.item_name)))
+        item_order = {name: index for index, name in enumerate(self.chest_items)}
+        rows = sorted(stats, key=lambda item: (-item.quantity, item_order.get(item.item_name, len(item_order))))
         max_qty = max((item.quantity for item in rows), default=0)
         total = sum(item.quantity for item in rows)
         self.overview_table.setRowCount(len(rows))
@@ -4836,6 +5244,31 @@ class DeepSeaChestStatsDialog(QDialog):
             progress.setMinimumHeight(24)
             self.overview_table.setCellWidget(row_index, 3, progress)
             self.overview_table.setRowHeight(row_index, 28)
+
+    def refresh_chest_item_table(self, totals: dict[str, int], select_item_id: str | None = None) -> None:
+        self.chest_item_table.blockSignals(True)
+        self.chest_item_table.setRowCount(len(self.chest_item_rows))
+        selected_row = -1
+        for row_index, row in enumerate(self.chest_item_rows):
+            values = [
+                row_index + 1,
+                row["item_name"],
+                self.format_diamonds(float(row["diamond_price"] or 0)),
+                row["note"],
+                totals.get(str(row["item_name"]), 0),
+            ]
+            for col, value in enumerate(values):
+                item = QTableWidgetItem(str(value or ""))
+                if col == 1:
+                    item.setData(Qt.ItemDataRole.UserRole, row["id"])
+                if col in {0, 2, 4}:
+                    item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+                self.chest_item_table.setItem(row_index, col, item)
+            if select_item_id and row["id"] == select_item_id:
+                selected_row = row_index
+        self.chest_item_table.blockSignals(False)
+        if selected_row >= 0:
+            self.chest_item_table.selectRow(selected_row)
 
 
 class MainWindow(QMainWindow):
@@ -10454,6 +10887,8 @@ class MainWindow(QMainWindow):
         self.runner_panel.load_scripts()
         self.runner_panel.refresh_steps()
         self.runner_panel.refresh_loop_stats()
+        if self.mini_runner is not None:
+            self.mini_runner.sync_from_controller()
 
     def run_selected_step(self) -> None:
         step = self.current_step()
